@@ -516,17 +516,17 @@ function genRaw(L,a){
   const colors=shuffle([0,1,2,3,4,5,6,7],r);
   picked.forEach((ci,k)=>{
     const name=CATS[ci][0],words=CATS[ci][1];
-    const n=Math.min(words.length,3+Math.floor(r()*(maxN-2)));
+    const lo=L<20?3:L<40?4:5;const n=Math.min(words.length,lo+Math.floor(r()*(maxN-lo+1)));
     const ord=!!CATS[ci][4];
     const ws=ord?words.slice(0,n):shuffle(words.slice(),r).slice(0,n);
     cats.push({name,total:n,color:colors[k%8],pic:!!CATS[ci][3],ord});
     const cid=id++;cards[cid]={id:cid,t:'c',c:k,text:name};deck.push(cid);
     ws.forEach((w,j)=>{const wid=id++;cards[wid]={id:wid,t:'w',c:k,text:w,ord:j};deck.push(wid)});
   });
-  const lockSpec=L<5?[]:L<13?[1]:L<25?[2]:[1,2];
+  const lockSpec=L<5?[]:L<13?[1]:L<25?[2]:L<45?[1,2]:[2,2];
   lockSpec.forEach((n,li)=>{for(let j=0;j<n;j++){const kid=id++;cards[kid]={id:kid,t:'k',c:-1,text:'Ключ',lk:li,col:n>1?1:0};deck.push(kid)}});
   shuffle(deck,r);
-  const counts=NC===5?(L<=4?[1,2,2,3,3]:L<=12?[1,2,3,4,4]:[2,3,4,5,5]):(L<=4?[1,2,2,3]:L<=12?[1,2,3,4]:[2,3,4,5]);
+  const counts=NC===5?(L<=4?[1,2,2,3,3]:L<=12?[1,2,3,4,4]:L<30?[2,3,4,5,5]:L<50?[3,4,5,6,6]:[4,5,6,7,7]):(L<=4?[1,2,2,3]:L<=12?[1,2,3,4]:L<30?[2,3,4,5]:L<50?[3,4,5,6]:[4,5,6,7]);
   const cols=counts.map(n=>{const col=[];for(let j=0;j<n;j++)col.push({id:deck.pop(),up:j===n-1});return col});
   const locks=new Array(NC).fill(null);
   lockSpec.forEach((n,j)=>{const ci=NC-1-(lockSpec.length-1-j);locks[ci]={need:n,have:0,lk:j,col:n>1?1:0};
@@ -539,7 +539,7 @@ function genRaw(L,a){
     for(let i=0;i<deck.length;i++)if(isKey(deck[i])&&slots.length){const o=slots.pop();const t=o.id;o.id=deck[i];deck[i]=t}
     cols.forEach((col,ci)=>{if(locks[ci]||!col.length)return;const top=col[col.length-1];if(isKey(top.id)&&slots.length){const o=slots.pop();const t=o.id;o.id=top.id;top.id=t}});
   }
-  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(NC,K)).fill(null),done:[],moves:0,hist:[],stockStart:deck.length,total:id};
+  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(L>=60?NC-1:NC,K)).fill(null),done:[],moves:0,hist:[],stockStart:deck.length,total:id};
 }
 let S=null;
 function solvable(L,a){
@@ -563,7 +563,7 @@ function genLevel(L){
   const prev=S;let a=0,best=0;
   for(;a<25;a++){best=solvable(L,a);if(best)break}
   S=prev;const g=genRaw(L,a>=25?0:a);
-  const slack=L<=4?1.45:L<=12?1.25:1.12;
+  const slack=L<=4?1.45:L<=12?1.25:L<25?1.12:L<40?1.08:L<60?1.05:1.03;
   g.limit=Math.ceil((best||g.total*3)*slack)+2;g.solverBest=best;
   return g;
 }
@@ -698,11 +698,11 @@ let PROG={level:1,best:{},coins:150,tokens:0,home:{},daily:{},bonus:{}};
 try{const p=JSON.parse(localStorage.getItem('kartoteka:prog')||'null');if(p&&p.level)PROG=Object.assign(PROG,p)}catch(e){}
 PROG.tokens=PROG.tokens||0;PROG.home=PROG.home||{};PROG.home.done=PROG.home.done||{};PROG.home.choice=PROG.home.choice||{};PROG.home.rewarded=PROG.home.rewarded||{};PROG.daily=PROG.daily||{};PROG.bonus=PROG.bonus||{};
 function saveProg(){try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
-function saveGame(){try{localStorage.setItem('kartoteka:game8',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
+function saveGame(){try{localStorage.setItem('kartoteka:game9',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
 function loadLevel(L,resume,daily){
   S=genLevel(L);undoUsed=false;
   if(daily){dailyMode=true}else{dailyMode=false;PROG.level=L;saveProg()}
-  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game8')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
+  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game9')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
   fresh=new Set();flipId=null;hideToast();layout();render();if(!daily)saveGame();
 }
 function plural(n,a,b,c){const m10=n%10,m100=n%100;if(m10===1&&m100!==11)return a;if(m10>=2&&m10<=4&&(m100<12||m100>14))return b;return c}
@@ -950,7 +950,8 @@ function openOv(html){hideToast();ovOpen=true;const host=$('#ovHost');host.inner
 function closeOv(){ovOpen=false;$('#ovHost').innerHTML=''}
 function starsFor(){
   const left=S.limit-S.moves,base=S.limit;
-  return left>=base*.22?3:left>=base*.1?2:1;
+  const best=S.solverBest||Math.round(S.limit/1.1),gap=Math.max(1,S.limit-best);
+  return S.moves<=best+gap*.4?3:S.moves<=best+gap*.75?2:1;
 }
 function starStr(n){return '★'.repeat(n)}
 function win(){
@@ -959,7 +960,7 @@ function win(){
   const left=Math.max(0,S.limit-S.moves);
   const reward=20+st*10+left;PROG.coins+=reward;
   const tok=1+(st>=3?1:0);PROG.tokens+=tok;
-  PROG.level=S.L+1;saveProg();try{localStorage.removeItem('kartoteka:game8')}catch(e){}
+  PROG.level=S.L+1;saveProg();try{localStorage.removeItem('kartoteka:game9')}catch(e){}
   openOv(`<div class="band"><div class="eyebrow">Все карты разложены</div><h2>Уровень ${S.L} пройден!</h2>
      <div class="bigstars" aria-label="${st} из 3 звёзд">${[0,1,2].map(k=>`<span class="st${k<st?'':' off'}">★</span>`).join('')}</div></div>
    <div class="sbody">
@@ -968,14 +969,14 @@ function win(){
        <div class="stat gold"><span class="k">Монеты</span><span class="v"><i class="coin"></i><span>+<span id="rew">0</span></span></span></div>
        <div class="stat blue"><span class="k">Жетоны</span><span class="v"><i class="tok"></i>+${tok}</span></div>
      </div>
-     <p class="note">Монеты: 20 за уровень + ${st*10} за звёзды + ${left} за оставшиеся ходы. Жетоны: 1 за уровень${st>=3?' + 1 за три звезды':', три звезды дают ещё 1'}. У вас ${PROG.tokens} — тратьте их в «Моём доме».${st<3?'<br>Для трёх звёзд оставьте в запасе '+Math.ceil(S.limit*.22)+' ходов.':''}</p>
-     <div class="acts2"><button class="sbtn soft" id="oHouse" type="button">🏠 Дом</button><button class="sbtn soft" id="oAgain" type="button">Ещё раз</button><button class="sbtn go" id="oNext" type="button">Дальше →</button></div>
+     <p class="note">Монеты: 20 за уровень + ${st*10} за звёзды + ${left} за оставшиеся ходы. Жетоны: 1 за уровень${st>=3?' + 1 за три звезды':', три звезды дают ещё 1'}. У вас ${PROG.tokens} — тратьте их в «Моём доме».${st<3?'<br>Для трёх звёзд уложитесь в '+Math.floor((S.solverBest||S.limit)+Math.max(1,S.limit-(S.solverBest||S.limit))*.4)+' ходов.':''}</p>
+     <div class="acts2"><button class="sbtn soft" id="oMain" type="button">Главная</button><button class="sbtn soft" id="oAgain" type="button">Ещё раз</button><button class="sbtn go" id="oNext" type="button">Дальше →</button></div>
    </div>`);
   confetti(innerWidth/2,innerHeight*.35,140);
   {const el=$('#rew');const t0=performance.now();const tick=t=>{const k=Math.min(1,(t-t0)/900);el.textContent=Math.round(reward*k);if(k<1&&el.isConnected)requestAnimationFrame(tick)};requestAnimationFrame(tick)}
   $('#oAgain').onclick=()=>{closeOv();loadLevel(S.L,false)};
   $('#oNext').onclick=()=>{closeOv();loadLevel(S.L+1,false)};
-  $('#oHouse').onclick=()=>{closeOv();loadLevel(S.L+1,false);houseScreen()};
+  $('#oMain').onclick=()=>{closeOv();loadLevel(S.L+1,false);homeMenu()};
 }
 function lose(){
   if(ovOpen)return;hideToast();
@@ -987,9 +988,10 @@ function lose(){
        <div class="stat gold"><span class="k">Ваши монеты</span><span class="v"><i class="coin"></i>${PROG.coins}</span></div>
      </div>
      <p class="note">${can?'Можно докупить 5 ходов и продолжить.':'На 5 ходов нужно '+PRICE.moves+' монет. Пройдите уровень заново, чтобы заработать.'}</p>
-     <div class="acts2"><button class="sbtn soft" id="oRestart" type="button">Заново</button><button class="sbtn gold" id="oMore" type="button" ${can?'':'disabled'}>+5 ходов · ${PRICE.moves}</button></div>
+     <div class="acts2"><button class="sbtn soft" id="oMain" type="button">Главная</button><button class="sbtn soft" id="oRestart" type="button">Заново</button><button class="sbtn gold" id="oMore" type="button" ${can?'':'disabled'}>+5 ходов · ${PRICE.moves}</button></div>
    </div></div>`);
   $('#oRestart').onclick=()=>{closeOv();restart()};
+  $('#oMain').onclick=()=>{closeOv();restart();homeMenu()};
   $('#oMore').onclick=()=>{if(!pay('moves','+5 ходов'))return;S.limit+=5;closeOv();render();saveGame();toast('Добавлено 5 ходов.')};
 }
 function levels(){
@@ -998,7 +1000,7 @@ function levels(){
   for(let i=1;i<=N;i++){const b=PROG.best[i]||0;g+=`<button class="lv${i===S.L?' cur':''}" data-l="${i}" type="button">${i}<small>${b?starStr(b):''}</small></button>`}
   openOv(`<div class="band blue"><div class="eyebrow">Все уровни открыты</div><h2>Выбери уровень</h2></div>
    <div class="sbody"><div class="grid">${g}</div>
-     <p class="note">Каждые 4 уровня добавляется категория. С 5 уровня — замки, с 13 — замки на два ключа, с 25 — два замка сразу.</p>
+     <p class="note">Сложность растёт: больше тем и слов, глубже стопки, меньше запас ходов. С 5 уровня — замки, с 25 — два замка, с 45 — два замка по два ключа, с 60 — на одну ячейку для категорий меньше.</p>
      <div class="acts2"><button class="sbtn soft" id="oHelp" type="button">Правила</button><button class="sbtn soft" id="oHome" type="button">Главная</button><button class="sbtn" id="oClose" type="button">Закрыть</button></div></div>`);
   $('#oHelp').onclick=()=>{closeOv();help()};
   $('#oHome').onclick=()=>{closeOv();homeMenu()};
@@ -1136,7 +1138,7 @@ function houseScreen(ri){
 }
 
 /* ---------- Уровень дня ---------- */
-function dailyNum(){const t=today();let h=7;for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))>>>0;return 14+(h%32)}
+function dailyNum(){const t=today();let h=7;for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))>>>0;return 20+(h%40)}
 function dailyDone(){return PROG.daily.date===today()}
 function startDaily(){closeOv();loadLevel(dailyNum(),false,true);toast(dailyDone()?'Уровень дня уже пройден. Можно сыграть ещё раз, но без награды.':'Уровень дня: за победу +60 монет и +3 жетона.')}
 function dailyWin(){
