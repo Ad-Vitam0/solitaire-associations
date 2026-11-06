@@ -531,6 +531,14 @@ function genRaw(L,a){
   const locks=new Array(NC).fill(null);
   lockSpec.forEach((n,j)=>{const ci=NC-1-(lockSpec.length-1-j);locks[ci]={need:n,have:0,lk:j,col:n>1?1:0};
     cols[ci].forEach(o=>{if(cards[o.id].t==='k'){const k=deck.findIndex(x=>cards[x].t!=='k');const t=deck[k];deck[k]=o.id;o.id=t}})});
+  // Ключи прячем: только рубашкой вверх внутри открытых столбцов — не сверху и не в колоде
+  if(lockSpec.length){
+    const slots=[];cols.forEach((col,ci)=>{if(locks[ci])return;for(let j=0;j<col.length-1;j++)if(cards[col[j].id].t!=='k')slots.push(col[j])});
+    shuffle(slots,r);
+    const isKey=x=>cards[x].t==='k';
+    for(let i=0;i<deck.length;i++)if(isKey(deck[i])&&slots.length){const o=slots.pop();const t=o.id;o.id=deck[i];deck[i]=t}
+    cols.forEach((col,ci)=>{if(locks[ci]||!col.length)return;const top=col[col.length-1];if(isKey(top.id)&&slots.length){const o=slots.pop();const t=o.id;o.id=top.id;top.id=t}});
+  }
   return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(NC,K)).fill(null),done:[],moves:0,hist:[],stockStart:deck.length,total:id};
 }
 let S=null;
@@ -690,11 +698,11 @@ let PROG={level:1,best:{},coins:150,tokens:0,home:{},daily:{},bonus:{}};
 try{const p=JSON.parse(localStorage.getItem('kartoteka:prog')||'null');if(p&&p.level)PROG=Object.assign(PROG,p)}catch(e){}
 PROG.tokens=PROG.tokens||0;PROG.home=PROG.home||{};PROG.home.done=PROG.home.done||{};PROG.home.choice=PROG.home.choice||{};PROG.home.rewarded=PROG.home.rewarded||{};PROG.daily=PROG.daily||{};PROG.bonus=PROG.bonus||{};
 function saveProg(){try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
-function saveGame(){try{localStorage.setItem('kartoteka:game7',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
+function saveGame(){try{localStorage.setItem('kartoteka:game8',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
 function loadLevel(L,resume,daily){
   S=genLevel(L);undoUsed=false;
   if(daily){dailyMode=true}else{dailyMode=false;PROG.level=L;saveProg()}
-  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game7')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
+  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game8')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
   fresh=new Set();flipId=null;hideToast();layout();render();if(!daily)saveGame();
 }
 function plural(n,a,b,c){const m10=n%10,m100=n%100;if(m10===1&&m100!==11)return a;if(m10>=2&&m10<=4&&(m100<12||m100>14))return b;return c}
@@ -951,7 +959,7 @@ function win(){
   const left=Math.max(0,S.limit-S.moves);
   const reward=20+st*10+left;PROG.coins+=reward;
   const tok=1+(st>=3?1:0);PROG.tokens+=tok;
-  PROG.level=S.L+1;saveProg();try{localStorage.removeItem('kartoteka:game7')}catch(e){}
+  PROG.level=S.L+1;saveProg();try{localStorage.removeItem('kartoteka:game8')}catch(e){}
   openOv(`<div class="band"><div class="eyebrow">Все карты разложены</div><h2>Уровень ${S.L} пройден!</h2>
      <div class="bigstars" aria-label="${st} из 3 звёзд">${[0,1,2].map(k=>`<span class="st${k<st?'':' off'}">★</span>`).join('')}</div></div>
    <div class="sbody">
