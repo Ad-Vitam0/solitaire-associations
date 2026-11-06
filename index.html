@@ -187,6 +187,12 @@ body{background:var(--desk);color:var(--ui);font-family:var(--f-word);overflow:h
 .lcnt{font-weight:900;font-size:calc(var(--cw)*.2);color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.25);font-variant-numeric:tabular-nums;line-height:1}
 .lockcard.y .lcnt,.lockcard.y .lglyph{color:#7a4f00;text-shadow:none}
 .unlocking .card{animation:pop .35s ease-out}
+.ice-ov{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;background:linear-gradient(135deg,rgba(225,246,255,.72),rgba(150,210,245,.55) 55%,rgba(225,246,255,.7));box-shadow:inset 0 0 0 2px rgba(255,255,255,.95),inset 0 0 14px rgba(90,170,230,.75)}
+.ice-ov::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.75) 38%,transparent 46%),linear-gradient(115deg,transparent 58%,rgba(255,255,255,.45) 62%,transparent 66%)}
+.ice-ov.l2{background:linear-gradient(135deg,rgba(210,240,255,.88),rgba(120,190,240,.75) 55%,rgba(210,240,255,.88))}
+.ice-ov b,.chain-ov b{position:absolute;right:4px;top:3px;font-size:13px;line-height:1;color:#1b6fb5;background:#fff;border-radius:9px;padding:2px 5px;box-shadow:0 1px 3px rgba(0,0,0,.25);font-family:var(--f-display)}
+.chain-ov{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;background:repeating-linear-gradient(35deg,transparent 0 10px,rgba(70,70,80,.0) 10px 12px),linear-gradient(35deg,transparent 42%,#6b7280 42% 46%,#9ca3af 46% 50%,#6b7280 50% 54%,transparent 54%),linear-gradient(-35deg,transparent 42%,#6b7280 42% 46%,#9ca3af 46% 50%,#6b7280 50% 54%,transparent 54%);box-shadow:inset 0 0 0 2px rgba(80,80,90,.5)}
+.chain-ov b{color:#374151}
 
 /* feedback */
 .ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50}
@@ -298,7 +304,10 @@ body{background:var(--desk);color:var(--ui);font-family:var(--f-word);overflow:h
 .house{color:#fff;display:flex;flex-direction:column;gap:12px;padding:6px 2px}
 .hhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .hhead h2{font-weight:900;font-size:26px;margin:0;text-shadow:0 2px 0 rgba(0,0,0,.2)}
-.roomtabs{display:flex;gap:6px;flex-wrap:wrap}
+.roomtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0 6px;scroll-behavior:smooth}.roomtabs::-webkit-scrollbar{display:none}
+.rtab{flex:0 0 auto}
+.hsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-weight:800;font-size:13px;color:#eaffef}.hsum b{color:#fff}
+.rhead{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;color:#fff}.rhead b{font-size:20px}.rhead span{font-size:14px;opacity:.85}
 .rtab{border:0;background:rgba(0,0,0,.2);color:#fff;font-family:var(--f-display);font-weight:800;font-size:14px;padding:7px 12px;border-radius:999px;cursor:pointer}
 .rtab.cur{background:#fff;color:#157a33}
 .rtab.done::after{content:" ✓";color:#ffd23f}
@@ -521,7 +530,7 @@ function catsFor(L){
   }
   return _catMemo[L-1];
 }
-function genRaw(L,a){
+function genRaw(L,a,soft){soft=soft||0;
   const r=rng32(L*7919+101+a*104729);
   const K=Math.min(8,3+Math.floor((L-1)/4));
   const picked=catsFor(L);
@@ -553,13 +562,32 @@ function genRaw(L,a){
     for(let i=0;i<deck.length;i++)if(isKey(deck[i])&&slots.length){const o=slots.pop();const t=o.id;o.id=deck[i];deck[i]=t}
     cols.forEach((col,ci)=>{if(locks[ci]||!col.length)return;const top=col[col.length-1];if(isKey(top.id)&&slots.length){const o=slots.pop();const t=o.id;o.id=top.id;top.id=t}});
   }
-  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(L>=60?NC-1:NC,K)).fill(null),done:[],moves:0,hist:[],stockStart:deck.length,total:id};
+  let nIce=L<15?0:Math.min(4,1+Math.floor((L-15)/20)),nChain=L<35?0:Math.min(3,1+Math.floor((L-35)/30));
+  if(soft===1){nIce=Math.ceil(nIce/2);nChain=Math.floor(nChain/2)}else if(soft>=2){nIce=0;nChain=0}
+  if(nIce||nChain){
+    const ent=[];cols.forEach(col=>col.forEach(o=>{if(cards[o.id].t==='w')ent.push(o)}));shuffle(ent,r);
+    let i=0;for(;i<ent.length&&i<nIce;i++)ent[i].ice=(L>=60&&r()<.5)?2:1;
+    // цепь только если карточка категории этого слова не лежит под скованной картой
+    const pos={};cols.forEach((col,ci)=>col.forEach((o,j)=>pos[o.id]=[ci,j]));
+    const catCard={};Object.values(cards).forEach(c=>{if(c.t==='c')catCard[c.c]=c.id});
+    const chainedAt=[];
+    const safe=o=>{const cc=catCard[cards[o.id].c],pc=pos[cc];if(!pc)return true;const po=pos[o.id];
+      if(po[0]===pc[0]&&po[1]>pc[1])return false;
+      return !chainedAt.some(([ci,j])=>ci===pc[0]&&j>pc[1])};
+    let ch=0;for(;i<ent.length&&ch<nChain;i++){const o=ent[i];if(!safe(o))continue;
+      const po=pos[o.id];
+      cards[o.id].chain=true;chainedAt.push(po);ch++;
+      // проверка: не оказалась ли под новой цепью карточка категории уже скованного слова
+      const bad=Object.values(cards).some(c=>{if(!c.chain)return false;const pc=pos[catCard[c.c]];return pc&&chainedAt.some(([ci,j])=>ci===pc[0]&&j>pc[1])});
+      if(bad){cards[o.id].chain=false;chainedAt.pop();ch--}}
+  }
+  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(L>=60&&soft<3?NC-1:NC,K)).fill(null),soft,done:[],moves:0,hist:[],stockStart:deck.length,total:id};
 }
 let S=null;
-function solvable(L,a){
+function solvable(L,a,soft){
   const r=rng32(L*31+a*7+5);let best=0;
   for(let t=0;t<10;t++){
-    S=genRaw(L,a);let steps=0,idle=0;
+    S=genRaw(L,a,soft);let steps=0,idle=0;
     while(steps<2500){
       S.slots.forEach((sl,i)=>{if(sl&&sl.complete)finishSlot(i)});
       if(isWon()){if(!best||S.moves<best)best=S.moves;break}
@@ -575,18 +603,25 @@ function solvable(L,a){
 }
 function genLevel(L){
   const prev=S;let a=0,best=0;
-  for(;a<25;a++){best=solvable(L,a);if(best)break}
-  S=prev;const g=genRaw(L,a>=25?0:a);
+  let soft=0;
+  outer:for(soft=0;soft<4;soft++)for(a=0;a<(soft?15:30);a++){best=solvable(L,a,soft);if(best)break outer}
+  if(soft>3){soft=3;a=0}
+  S=prev;const g=genRaw(L,a,soft);
   const slack=L<=4?1.45:L<=12?1.25:L<25?1.12:L<40?1.08:L<60?1.05:1.03;
   g.limit=Math.ceil((best||g.total*3)*slack)+2;g.solverBest=best;
   return g;
 }
 function snap(){return JSON.stringify({limit:S.limit,cols:S.cols,locks:S.locks,stock:S.stock,waste:S.waste,slots:S.slots,done:S.done,moves:S.moves})}
 function pushHist(){if(typeof undoUsed!=='undefined')undoUsed=false;S.hist.push(snap());if(S.hist.length>400)S.hist.shift()}
+// Препятствия: лёд (слои тают от собранных категорий) и цепи (спадают, когда категория слова открыта в ячейке)
+function chained(o){const c=S.cards[o.id];return !!c.chain&&!S.slots.some(sl=>sl&&sl.cat===c.c)}
+function blocked(o){return (o.ice||0)>0||chained(o)}
+function meltIce(){S.cols.forEach(c=>c.forEach(o=>{if(o.ice)o.ice--}))}
 function runAt(ci,idx){
   if(S.locks[ci])return null;
   const col=S.cols[ci];if(idx<0||idx>=col.length)return null;
   const seg=col.slice(idx);if(!seg.every(o=>o.up))return null;
+  if(seg.some(blocked))return null;
   if(seg.length>1){const c0=S.cards[seg[0].id];if(!seg.every(o=>{const k=S.cards[o.id];return k.t==='w'&&k.c===c0.c}))return null}
   return seg.map(o=>o.id);
 }
@@ -606,7 +641,7 @@ function canDrop(ids,src,tg){
   if(S.locks[tg.i])return false;
   const col=S.cols[tg.i];
   if(!col.length)return !(src.k==='col'&&src.idx===0);
-  const top=col[col.length-1];if(!top.up)return false;
+  const top=col[col.length-1];if(!top.up||blocked(top))return false;
   const tc=S.cards[top.id];
   return tc.t==='w'&&cs.every(x=>x.t==='w'&&x.c===tc.c);
 }
@@ -630,6 +665,7 @@ function applyMove(src,tg){
     if(!sl)S.slots[tg.i]={cat:S.cards[ids[0]].c,n:0,last:null};
     else{sl.n+=ids.length;sl.last=S.cats[sl.cat].ord?ids.reduce((m,id)=>S.cards[id].ord>S.cards[m].ord?id:m,ids[0]):ids[ids.length-1];if(sl.n>=S.cats[sl.cat].total){sl.complete=true;completed=tg.i}}
   }else ids.forEach(id=>S.cols[tg.i].push({id,up:true}));
+  if(completed>=0)meltIce();
   S.moves++;
   return {ids,completed,revealed,unlocked};
 }
@@ -699,6 +735,7 @@ function applyJoker(){
   const revealed=takeCard(p.id);const c=S.cards[p.id];let completed=-1;
   if(c.t==='c')S.slots[p.slot]={cat:c.c,n:0,last:null};
   else{const sl=S.slots[p.slot];sl.n++;sl.last=p.id;if(sl.n>=S.cats[sl.cat].total){sl.complete=true;completed=p.slot}}
+  if(completed>=0)meltIce();
   return {id:p.id,slot:p.slot,completed,revealed};
 }
 /*LOGIC-END*/
@@ -712,13 +749,13 @@ let PROG={level:1,best:{},coins:150,tokens:0,home:{},daily:{},bonus:{}};
 try{const p=JSON.parse(localStorage.getItem('kartoteka:prog')||'null');if(p&&p.level)PROG=Object.assign(PROG,p)}catch(e){}
 PROG.tokens=PROG.tokens||0;PROG.home=PROG.home||{};PROG.home.done=PROG.home.done||{};PROG.home.choice=PROG.home.choice||{};PROG.home.rewarded=PROG.home.rewarded||{};PROG.daily=PROG.daily||{};PROG.bonus=PROG.bonus||{};PROG.album=PROG.album||{};PROG.chest=PROG.chest||{};PROG.streak=PROG.streak||0;
 {const mb=Object.keys(PROG.best).reduce((m,k)=>Math.max(m,+k),0);PROG.top=Math.max(PROG.top||1,PROG.level||1,mb+1)}
-let NEWS_GRANT=-1;if(PROG.news!=='v7'){const had=Object.keys(PROG.best).length>0||(PROG.level||1)>1;NEWS_GRANT=had?(PROG.migr?0:Math.min(15,Object.keys(PROG.best).length)):-1;PROG.tokens+=Math.max(0,NEWS_GRANT);PROG.migr=1;PROG.news='v7';try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
+let NEWS_GRANT=-1;if(PROG.news!=='v9'){const had=Object.keys(PROG.best).length>0||(PROG.level||1)>1;NEWS_GRANT=had?(PROG.migr?0:Math.min(15,Object.keys(PROG.best).length)):-1;PROG.tokens+=Math.max(0,NEWS_GRANT);PROG.migr=1;PROG.news='v9';try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
 function saveProg(){try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
-function saveGame(){try{localStorage.setItem('kartoteka:game9',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
+function saveGame(){try{localStorage.setItem('kartoteka:game10',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
 function loadLevel(L,resume,daily){
   S=genLevel(L);undoUsed=false;
   if(daily){dailyMode=true}else{dailyMode=false;PROG.level=L;saveProg()}
-  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game9')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
+  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game10')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
   fresh=new Set();flipId=null;hideToast();layout();render();if(!daily)saveGame();
 }
 function plural(n,a,b,c){const m10=n%10,m100=n%100;if(m10===1&&m100!==11)return a;if(m10>=2&&m10<=4&&(m100<12||m100>14))return b;return c}
@@ -762,6 +799,12 @@ function layout(){
   r.setProperty('--nc',NC);r.setProperty('--fan',(NC===5?22:14)+'px');r.setProperty('--gap',gap+'px');
   r.setProperty('--cw',cw+'px');r.setProperty('--ch',ch+'px');r.setProperty('--offup',M.up+'px');r.setProperty('--offdown',M.down+'px');
 }
+function obst(o,html){
+  let ov='';
+  if(o.ice)ov+=`<span class="ice-ov${o.ice>1?' l2':''}" aria-label="Лёд, слоёв: ${o.ice}"><b>❄${o.ice>1?'2':''}</b></span>`;
+  if(S.cards[o.id].chain&&chained(o))ov+='<span class="chain-ov" aria-label="Цепи"><b>⛓</b></span>';
+  return ov?html.replace(/<\/div>$/,ov+'</div>'):html;
+}
 function render(){
   $('#lvl').textContent=dailyMode?'дня':S.L;
   const left=Math.max(0,S.limit-S.moves);$('#movesLeft').textContent=left;$('.ribbon').classList.toggle('low',left<=5);
@@ -770,6 +813,9 @@ function render(){
   const tipEl=$('#tip');
   if(S.L<=2){tipEl.textContent=TIP0;tipEl.hidden=false}
   else if(S.L===5||S.L===13){tipEl.textContent=S.L===5?'Новое: замок. Столбец под замком заперт, пока не перетащите на него ключ того же цвета.':'Теперь красному замку нужно два красных ключа. Счётчик на замке показывает, сколько уже есть.';tipEl.hidden=false}
+  else if(S.L>=15&&S.L<=17&&!dailyMode){tipEl.textContent='Новое: лёд ❄. Ледяную карту нельзя двигать и класть на неё. Каждая собранная категория растапливает по одному слою.';tipEl.hidden=false}
+  else if(S.L>=35&&S.L<=37&&!dailyMode){tipEl.textContent='Новое: цепи ⛓. Скованное слово освободится, когда его категория окажется в ячейке с короной.';tipEl.hidden=false}
+  else if(S.L>=60&&S.L<=61&&!dailyMode){tipEl.textContent='Теперь лёд бывает двойным ❄2 — нужно собрать две категории. И ячеек для категорий на одну меньше.';tipEl.hidden=false}
   else if(S.cats.some(c=>c.ord)&&S.L<=10){tipEl.textContent='Категорию со значком «↑ по порядку» собирают строго по очереди: от первой ступени к последней.';tipEl.hidden=false}
   else tipEl.hidden=true;
   $('#bUndo').disabled=!S.hist.length||undoUsed;$('#undoNote').textContent=undoUsed?'после хода':'1 раз';$('#bShuffle').disabled=S.stock.length+S.waste.length<2;$('#bJoker').disabled=!jokerPlan();
@@ -781,10 +827,10 @@ function render(){
     if(col.length>1){const need=M.ch+downs*M.down+(ups-1)*M.up;if(need>avail&&ups>1)up=Math.max(20,Math.floor((avail-M.ch-downs*M.down)/(ups-1)))}
     const lk=S.locks[i];
     let y=0,h='';
-    if(lk){let yy=0;col.forEach(o=>{h+=cardHTML(o.id,false,yy,null,' locked');yy+=M.down});
+    if(lk){let yy=0;col.forEach(o=>{h+=obst(o,cardHTML(o.id,false,yy,null,' locked'));yy+=M.down});
       const height=yy+M.ch;
       return `<div class="col" data-drop="lock:${i}" style="height:${height}px">${h}<div class="lockcard${lk.col?'':' y'}" style="top:${yy}px;--lc:var(--lk${lk.col});--lcd:var(--lk${lk.col}d)" aria-label="Замок, ключей ${lk.have} из ${lk.need}">${LOCK_SVG}<span class="lcnt">${lk.have}/${lk.need}</span></div></div>`}
-    col.forEach((o,idx)=>{const last=idx===col.length-1;h+=cardHTML(o.id,o.up,y,o.up?`col:${i}:${idx}`:null,last?' exp':'');y+=o.up?up:M.down});
+    col.forEach((o,idx)=>{const last=idx===col.length-1;h+=obst(o,cardHTML(o.id,o.up,y,o.up?`col:${i}:${idx}`:null,last?' exp':''));y+=o.up?up:M.down});
     const height=col.length?y-(col[col.length-1].up?up:M.down)+M.ch:M.ch;
     const lockHTML='';
     return `<div class="col" data-drop="${lk?'lock':'col'}:${i}" style="height:${height}px">${col.length?'':'<div class="col-empty"></div>'}${h}${lockHTML}</div>`;
@@ -837,7 +883,7 @@ document.addEventListener('pointerdown',e=>{
   if(e.target.closest('[data-act="draw"]')){e.preventDefault();draw();return}
   const el=e.target.closest('[data-src]');if(!el)return;
   const src=parse(el.dataset.src);const ids=srcIds(src);
-  if(!ids){shake(el);return}
+  if(!ids){shake(el);if(src.k==='col'){const o=S.cols[src.i][src.idx];const bad=o&&S.cols[src.i].slice(src.idx).find(blocked);if(bad){toast(bad.ice?`Карта во льду (слоёв: ${bad.ice}). Соберите любую категорию — лёд подтает.`:'Карта в цепях. Откройте её категорию в ячейке с короной — цепи спадут.')}}return}
   e.preventDefault();
   drag={src,ids,el,x0:e.clientX,y0:e.clientY,started:false,ghost:null,over:null};
   try{el.setPointerCapture(e.pointerId)}catch(_){}
@@ -963,7 +1009,7 @@ function stuckToast(){toast('Похоже, ходов больше нет. От�
   '<button class="btn primary" data-t="undo" type="button">Отменить ход</button><button class="btn" data-t="joker" type="button">Джокер · 60</button><button class="btn" data-t="restart" type="button">Заново</button><button class="btn" data-t="close" type="button">Закрыть</button>')}
 function openOv(html){hideToast();ovOpen=true;const host=$('#ovHost');host.innerHTML=`<div class="ov"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
   host.querySelector('.ov').addEventListener('pointerdown',e=>{if(e.target.classList.contains('ov')&&!host.querySelector('.lose, .home'))closeOv()});
-  const f=host.querySelector('.sbtn.go')||host.querySelector('.lv.cur')||host.querySelector('.sbtn');if(f)f.focus()}
+  const f=host.querySelector('.sbtn.go')||host.querySelector('.lv.cur')||host.querySelector('.sbtn');if(f)f.focus({preventScroll:true});const sh=host.querySelector('.sheet');if(sh)sh.scrollTop=0}
 function closeOv(){ovOpen=false;$('#ovHost').innerHTML=''}
 function starsFor(){
   const left=S.limit-S.moves,base=S.limit;
@@ -984,7 +1030,7 @@ function win(){
   q.forEach(t=>extra.push(`📋 Задание выполнено: «${t}» — заберите награду в «Заданиях».`));
   PROG.top=Math.max(PROG.top||1,S.L+1);
   const next=S.L+1<PROG.top?PROG.top:S.L+1;
-  PROG.level=next;saveProg();try{localStorage.removeItem('kartoteka:game9')}catch(e){}
+  PROG.level=next;saveProg();try{localStorage.removeItem('kartoteka:game10')}catch(e){}
   $('#coinN').textContent=PROG.coins;$('#tokN').textContent=PROG.tokens;
   sfx('win');
   openOv(`<div class="band"><div class="eyebrow">Все карты разложены</div><h2>Уровень ${S.L} пройден!</h2>
@@ -1042,6 +1088,8 @@ function help(){
    <li>Категории «↑ по порядку» собирают строго по очереди: в «Карьере» сначала стажёр, потом младший специалист и так далее.</li>
    <li>В столбцах карту можно положить на карту той же категории. Стопку одной категории можно переносить целиком. В пустой столбец кладётся любая карта.</li>
    <li>Замки цветные: жёлтый открывает жёлтый ключ, красному нужно два красных.</li>
+   <li><b>❄ Лёд</b> (с 15 уровня): ледяную карту нельзя двигать и класть на неё. Каждая собранная категория растапливает по слою; двойной лёд ❄2 — с 60 уровня.</li>
+   <li><b>⛓ Цепи</b> (с 35 уровня): скованное слово освобождается, когда его категория лежит в ячейке с короной.</li>
    <li>Колода открывается нажатием. Каждое открытие — тоже ход. Ходов на уровень ограниченное число.</li>
   </ul>
   <div class="stats2">
@@ -1065,52 +1113,175 @@ function dateDiffDays(a,b){const p=a.split('-').map(Number),q=b.split('-').map(N
 function sheetBare(){const host=$('#ovHost');const ov=host.querySelector('.ov');if(ov)ov.style.background='var(--desk)';const sh=host.querySelector('.sheet');if(sh){sh.style.background='transparent';sh.style.boxShadow='none';sh.style.animation='none';sh.style.width='min(560px,100%)'}}
 
 /* ---------- Мой дом ---------- */
-const HOME=[
- {id:'liv',name:'Гостиная',story:'Дом достался вам от бабушки. Начнём с гостиной — здесь будут собираться гости.',tasks:[
-   {id:'liv1',name:'Покрасить стены',cost:2,choices:[['Тёплый беж','#f0e2c8'],['Мятный','#cdeadb']]},
-   {id:'liv2',name:'Постелить ковёр',cost:3},
-   {id:'liv3',name:'Поставить диван',cost:3},
-   {id:'liv4',name:'Торшер у дивана',cost:4},
- ]},
- {id:'kit',name:'Кухня',story:'Гостиная готова! Теперь кухня: без неё не будет ни чая, ни пирогов.',tasks:[
-   {id:'kit1',name:'Плитка-фартук',cost:3,choices:[['Белая','#ffffff'],['Голубая','#bfe0ff']]},
-   {id:'kit2',name:'Кухонный гарнитур',cost:4},
-   {id:'kit3',name:'Стол и стулья',cost:4},
-   {id:'kit4',name:'Холодильник',cost:5},
- ]},
- {id:'bed',name:'Спальня',story:'Пора подумать об уюте. Спальня ждёт ремонта.',tasks:[
-   {id:'bed1',name:'Поклеить обои',cost:4,choices:[['Голубые','#d2e8ff'],['Розовые','#ffd9e6']]},
-   {id:'bed2',name:'Кровать',cost:5},
-   {id:'bed3',name:'Шкаф',cost:5},
-   {id:'bed4',name:'Тумба и картина',cost:6},
- ]},
- {id:'bath',name:'Ванная',story:'Пора освежить ванную: здесь начинается каждое утро.',tasks:[
-   {id:'bath1',name:'Выложить плитку',cost:5,choices:[['Белая','#f4f7fa'],['Бирюзовая','#bfe9e4']]},
-   {id:'bath2',name:'Поставить ванну',cost:5},
-   {id:'bath3',name:'Раковина и зеркало',cost:6},
-   {id:'bath4',name:'Полотенца и цветок',cost:6},
- ]},
- {id:'kid',name:'Детская',story:'Скоро в гости приедут внуки. Им нужна своя комната.',tasks:[
-   {id:'kid1',name:'Весёлые обои',cost:6,choices:[['Жёлтые','#fff1b8'],['Салатовые','#dcf5c4']]},
-   {id:'kid2',name:'Детская кровать',cost:6},
-   {id:'kid3',name:'Игрушки',cost:7},
-   {id:'kid4',name:'Полка с книгами',cost:7},
- ]},
- {id:'off',name:'Кабинет',story:'В дедушкином кабинете пылятся старые книги. Вернём ему уют.',tasks:[
-   {id:'off1',name:'Покрасить стены',cost:7,choices:[['Серые','#dfe3e8'],['Оливковые','#e3e6c8']]},
-   {id:'off2',name:'Письменный стол',cost:7},
-   {id:'off3',name:'Книжный шкаф',cost:8},
-   {id:'off4',name:'Глобус и лампа',cost:8},
- ]},
- {id:'gar',name:'Сад',story:'Внутри всё готово! Осталось привести в порядок сад перед домом — и можно звать гостей на новоселье.',tasks:[
-   {id:'gar1',name:'Подстричь газон',cost:8},
-   {id:'gar2',name:'Покрасить забор',cost:8,choices:[['Белый','#ffffff'],['Голубой','#9cc9f0']]},
-   {id:'gar3',name:'Клумба с цветами',cost:9},
-   {id:'gar4',name:'Скамейка и фонарь',cost:10},
- ]},
-];
+const HOME=[{"id":"liv","name":"Гостиная","story":"Дом достался вам от бабушки. Начнём с гостиной — здесь будут собираться гости.","tasks":[{"id":"liv1","name":"Покрасить стены","choices":[["Тёплый беж","#f0e2c8"],["Мятный","#cdeadb"]],"cost":2},{"id":"liv2","name":"Постелить ковёр","cost":3},{"id":"liv3","name":"Поставить диван","cost":3},{"id":"liv4","name":"Торшер у дивана","cost":4},{"id":"liv5","name":"Шторы на окно","items":[["curtains",70,90,0.78,"choice"]],"choices":[["Терракотовые","#e07a5f"],["Синие","#5b8fd6"]],"cost":3},{"id":"liv6","name":"Картина над диваном","items":[["painting",195,92,1,null]],"cost":3},{"id":"liv7","name":"Настенные часы","items":[["clock",150,58,1,null]],"cost":3},{"id":"liv8","name":"Журнальный столик","items":[["coffeetable",196,186,1,null]],"cost":3},{"id":"liv9","name":"Телевизор на тумбе","items":[["tv",58,150,0.9,null]],"cost":3},{"id":"liv10","name":"Полка с книгами","items":[["shelf",262,64,1,null]],"cost":4},{"id":"liv11","name":"Фикус в кадке","items":[["tallplant",22,196,0.9,null]],"cost":4},{"id":"liv12","name":"Лежанка для кота","items":[["catbed",102,196,1,null]],"cost":4}]},{"id":"kit","name":"Кухня","story":"Гостиная готова! Теперь кухня: без неё не будет ни чая, ни пирогов.","tasks":[{"id":"kit1","name":"Плитка-фартук","choices":[["Белая","#ffffff"],["Голубая","#bfe0ff"]],"cost":3},{"id":"kit2","name":"Кухонный гарнитур","cost":4},{"id":"kit3","name":"Стол и стулья","cost":4},{"id":"kit4","name":"Холодильник","cost":5},{"id":"kit5","name":"Часы на стене","items":[["clock",204,46,1,null]],"cost":4},{"id":"kit6","name":"Полка с банками","items":[["jars",244,100,0.9,null]],"cost":4},{"id":"kit7","name":"Ваза с фруктами","items":[["fruitbowl",244,118,0.9,null]],"cost":4},{"id":"kit8","name":"Базилик на столешнице","items":[["plant",190,104,0.7,null]],"cost":4},{"id":"kit9","name":"Лампа над столом","items":[["bulb",244,0,0.9,null]],"cost":4},{"id":"kit10","name":"Коврик у плиты","items":[["rug",110,190,0.9,"choice"]],"choices":[["Полосатый","#e07a5f"],["Зелёный","#5fbf8f"]],"cost":4},{"id":"kit11","name":"Корзина с овощами","items":[["basket",36,196,1,null]],"cost":4},{"id":"kit12","name":"Радио на полке","items":[["radio",30,104,0.8,null]],"cost":4}]},{"id":"bed","name":"Спальня","story":"Пора подумать об уюте. Спальня ждёт ремонта.","tasks":[{"id":"bed1","name":"Поклеить обои","choices":[["Голубые","#d2e8ff"],["Розовые","#ffd9e6"]],"cost":4},{"id":"bed2","name":"Кровать","cost":5},{"id":"bed3","name":"Шкаф","cost":5},{"id":"bed4","name":"Тумба и картина","cost":6},{"id":"bed5","name":"Гирлянда над кроватью","items":[["lights",130,10,0.9,null]],"cost":5},{"id":"bed6","name":"Часы","items":[["clock",222,52,0.9,null]],"cost":5},{"id":"bed7","name":"Напольное зеркало","items":[["mirror",230,150,0.9,null]],"cost":5},{"id":"bed8","name":"Пушистый ковёр","items":[["rug",132,186,1,"choice"]],"choices":[["Сиреневый","#b39ddb"],["Персиковый","#ffb38a"]],"cost":5},{"id":"bed9","name":"Плетёная корзина","items":[["basket",40,196,0.9,null]],"cost":5},{"id":"bed10","name":"Кот на кровати","items":[["catbed",176,126,0.7,null]],"cost":5},{"id":"bed11","name":"Полка над кроватью","items":[["shelf",186,96,0.9,null]],"cost":5},{"id":"bed12","name":"Растение у шкафа","items":[["tallplant",300,198,0.8,null]],"cost":5}]},{"id":"bath","name":"Ванная","story":"Пора освежить ванную: здесь начинается каждое утро.","tasks":[{"id":"bath1","name":"Выложить плитку","choices":[["Белая","#f4f7fa"],["Бирюзовая","#bfe9e4"]],"cost":5},{"id":"bath2","name":"Поставить ванну","cost":5},{"id":"bath3","name":"Раковина и зеркало","cost":6},{"id":"bath4","name":"Полотенца и цветок","cost":6},{"id":"bath5","name":"Полка с баночками","items":[["jars",200,80,0.9,null]],"cost":6},{"id":"bath6","name":"Светильник","items":[["bulb",200,0,0.9,null]],"cost":6},{"id":"bath7","name":"Коврик","items":[["rug",64,190,0.8,"choice"]],"choices":[["Голубой","#7fc4ff"],["Розовый","#ffb4c8"]],"cost":6},{"id":"bath8","name":"Корзина для белья","items":[["basket",22,198,0.9,null]],"cost":6},{"id":"bath9","name":"Резиновая уточка","items":[["duck",250,110,0.8,null]],"cost":6},{"id":"bath10","name":"Свечи на бортике","items":[["candles",140,110,0.7,null]],"cost":6},{"id":"bath11","name":"Картина","items":[["painting",270,64,0.9,null]],"cost":6},{"id":"bath12","name":"Шкафчик","items":[["dresser",292,198,0.7,null]],"cost":6}]},{"id":"kid","name":"Детская","story":"Скоро в гости приедут внуки. Им нужна своя комната.","tasks":[{"id":"kid1","name":"Весёлые обои","choices":[["Жёлтые","#fff1b8"],["Салатовые","#dcf5c4"]],"cost":6},{"id":"kid2","name":"Детская кровать","cost":6},{"id":"kid3","name":"Игрушки","cost":7},{"id":"kid4","name":"Полка с книгами","cost":7},{"id":"kid5","name":"Гирлянда","items":[["lights",250,12,0.8,null]],"cost":7},{"id":"kid6","name":"Постер","items":[["poster",160,74,1,null]],"cost":7},{"id":"kid7","name":"Ящик для игрушек","items":[["toybox",60,150,1,"choice"]],"choices":[["Синий","#2f7ff0"],["Красный","#ef4e3a"]],"cost":7},{"id":"kid8","name":"Лошадка-качалка","items":[["rockinghorse",272,198,1,null]],"cost":7},{"id":"kid9","name":"Барабан","items":[["drum",30,198,0.8,null]],"cost":7},{"id":"kid10","name":"Мольберт","items":[["easel",214,198,0.8,null]],"cost":7},{"id":"kid11","name":"Часы","items":[["clock",258,62,0.9,null]],"cost":7},{"id":"kid12","name":"Аквариум","items":[["aquarium",100,198,0.8,null]],"cost":7}]},{"id":"off","name":"Кабинет","story":"В дедушкином кабинете пылятся старые книги. Вернём ему уют.","tasks":[{"id":"off1","name":"Покрасить стены","choices":[["Серые","#dfe3e8"],["Оливковые","#e3e6c8"]],"cost":7},{"id":"off2","name":"Письменный стол","cost":7},{"id":"off3","name":"Книжный шкаф","cost":8},{"id":"off4","name":"Глобус и лампа","cost":8},{"id":"off5","name":"Шторы","items":[["curtains",170,74,0.68,"choice"]],"choices":[["Бордовые","#8e2f3c"],["Зелёные","#3f7f5f"]],"cost":7},{"id":"off6","name":"Картина","items":[["painting",100,62,1,null]],"cost":8},{"id":"off7","name":"Часы","items":[["clock",218,52,0.8,null]],"cost":8},{"id":"off8","name":"Ковёр","items":[["rug",132,190,1,"choice"]],"choices":[["Бордовый","#a8434d"],["Синий","#3d5f9e"]],"cost":8},{"id":"off9","name":"Кресло для чтения","items":[["armchair",290,198,1,"choice"]],"choices":[["Коричневое","#8a5c2f"],["Зелёное","#3f7f5f"]],"cost":8},{"id":"off10","name":"Граммофон","items":[["gramophone",40,198,1,null]],"cost":8},{"id":"off11","name":"Растение","items":[["tallplant",220,150,0.75,null]],"cost":8},{"id":"off12","name":"Стопка книг","items":[["bookstack",96,198,1,null]],"cost":8}]},{"id":"hall","name":"Прихожая","story":"Гости встречают дом с прихожей. Пусть она будет приветливой.","tasks":[{"id":"hall1","name":"Покрасить стены","choices":[["Песочные","#efe0c2"],["Голубые","#d6e6f2"]],"wall":true,"cost":8},{"id":"hall2","name":"Вешалка","items":[["coatrack",40,150,1,null]],"cost":8},{"id":"hall3","name":"Обувница","items":[["shoerack",92,150,1,null]],"cost":8},{"id":"hall4","name":"Зеркало","items":[["mirror",222,110,1.1,null]],"cost":8},{"id":"hall5","name":"Подставка для зонтов","items":[["umbrella",272,150,1,null]],"cost":8},{"id":"hall6","name":"Коврик у двери","items":[["rug",160,188,1,"choice"]],"choices":[["Красный","#c0573f"],["Серый","#8a96a3"]],"cost":8},{"id":"hall7","name":"Светильник","items":[["chandelier",160,0,0.9,null]],"cost":9},{"id":"hall8","name":"Скамейка","items":[["bench_in",222,150,1,null]],"cost":9},{"id":"hall9","name":"Семейные фото","items":[["photos",84,70,1,null]],"cost":9},{"id":"hall10","name":"Цветок","items":[["plant",306,198,1,null]],"cost":9},{"id":"hall11","name":"Часы","items":[["clock",286,58,0.9,null]],"cost":9},{"id":"hall12","name":"Корзина","items":[["basket",30,198,0.9,null]],"cost":9}],"bg":"in","door":[140,42]},{"id":"din","name":"Столовая","story":"Большой стол для всей семьи — сердце праздников.","tasks":[{"id":"din1","name":"Покрасить стены","choices":[["Кремовые","#f3e6cf"],["Персиковые","#f6d8c4"]],"wall":true,"cost":9},{"id":"din2","name":"Шторы","items":[["curtains",66,88,0.75,"choice"]],"choices":[["Терракотовые","#e07a5f"],["Синие","#5b8fd6"]],"cost":9},{"id":"din3","name":"Обеденный стол","items":[["table",170,152,1.1,null]],"cost":9},{"id":"din4","name":"Стулья","items":[["chair",116,154,1,null],["chair",226,154,1,null]],"cost":9},{"id":"din5","name":"Люстра","items":[["chandelier",170,0,1,null]],"cost":9},{"id":"din6","name":"Фрукты на столе","items":[["fruitbowl",160,118,1,null]],"cost":9},{"id":"din7","name":"Сервант с посудой","items":[["buffet",290,150,1,null]],"cost":9},{"id":"din8","name":"Картина","items":[["painting",236,74,1,null]],"cost":10},{"id":"din9","name":"Ковёр","items":[["rug",170,190,1.1,"choice"]],"choices":[["Бордовый","#a8434d"],["Оливковый","#8a9a4f"]],"cost":10},{"id":"din10","name":"Фикус","items":[["tallplant",22,198,0.9,null]],"cost":10},{"id":"din11","name":"Свечи на столе","items":[["candles",184,120,0.7,null]],"cost":10},{"id":"din12","name":"Часы","items":[["clock",120,46,1,null]],"cost":10}],"bg":"in","win":[30,30,72,58]},{"id":"guest","name":"Гостевая","story":"Здесь остановятся друзья, когда приедут на новоселье.","tasks":[{"id":"guest1","name":"Поклеить обои","choices":[["Лавандовые","#e6dcf2"],["Мятные","#d6efe3"]],"wall":true,"cost":10},{"id":"guest2","name":"Кровать","items":[["bed",112,150,1,"choice"]],"choices":[["Голубое покрывало","#7da7d9"],["Жёлтое покрывало","#f2c14e"]],"cost":10},{"id":"guest3","name":"Тумбочка с лампой","items":[["nightstand",36,150,1,null],["lamp",36,124,0.8,null]],"cost":10},{"id":"guest4","name":"Шторы","items":[["curtains",256,92,0.76,"choice"]],"choices":[["Терракотовые","#e07a5f"],["Синие","#5b8fd6"]],"cost":10},{"id":"guest5","name":"Ковёр","items":[["rug",112,188,1,"choice"]],"choices":[["Сиреневый","#b39ddb"],["Песочный","#d9b98a"]],"cost":10},{"id":"guest6","name":"Комод","items":[["dresser",264,150,1,null]],"cost":10},{"id":"guest7","name":"Картина","items":[["painting",112,62,1,null]],"cost":10},{"id":"guest8","name":"Стул","items":[["chair",206,152,1,null]],"cost":10},{"id":"guest9","name":"Растение","items":[["tallplant",306,198,0.8,null]],"cost":11},{"id":"guest10","name":"Ваза с цветами","items":[["vase",264,114,0.8,null]],"cost":11},{"id":"guest11","name":"Часы","items":[["clock",180,40,0.9,null]],"cost":11},{"id":"guest12","name":"Корзина с пледом","items":[["basket",40,198,0.9,null]],"cost":11}],"bg":"in","win":[220,34,72,58]},{"id":"lib","name":"Библиотека","story":"Дедушка собирал книги всю жизнь. Пора дать им достойное место.","tasks":[{"id":"lib1","name":"Покрасить стены","choices":[["Зелёные","#cfe0cf"],["Бордовые","#e8cfcf"]],"wall":true,"cost":11},{"id":"lib2","name":"Книжный шкаф слева","items":[["bookcase",40,150,1,null]],"cost":11},{"id":"lib3","name":"Книжный шкаф справа","items":[["bookcase",282,150,1,null]],"cost":11},{"id":"lib4","name":"Кресло","items":[["armchair",112,154,1,"choice"]],"choices":[["Бордовое","#8e2f3c"],["Коричневое","#8a5c2f"]],"cost":11},{"id":"lib5","name":"Торшер","items":[["floorlamp",80,152,1,null]],"cost":11},{"id":"lib6","name":"Ковёр","items":[["rug",164,190,1.1,"choice"]],"choices":[["Бордовый","#a8434d"],["Синий","#3d5f9e"]],"cost":11},{"id":"lib7","name":"Столик с лампой","items":[["coffeetable",196,158,0.9,null],["lamp",196,142,0.7,null]],"cost":11},{"id":"lib8","name":"Глобус","items":[["globe",230,152,1,null]],"cost":11},{"id":"lib9","name":"Лестница к полкам","items":[["ladder",252,152,0.8,null]],"cost":12},{"id":"lib10","name":"Шторы","items":[["curtains",160,76,0.62,"choice"]],"choices":[["Бордовые","#8e2f3c"],["Зелёные","#3f7f5f"]],"cost":12},{"id":"lib11","name":"Стопка книг","items":[["bookstack",66,198,1,null]],"cost":12},{"id":"lib12","name":"Кот-книголюб","items":[["catbed",224,198,0.9,null]],"cost":12}],"bg":"in","win":[136,28,48,48]},{"id":"mus","name":"Музыкальная","story":"Бабушка играла на пианино. Пусть в доме снова звучит музыка.","tasks":[{"id":"mus1","name":"Покрасить стены","choices":[["Голубые","#d8e6f3"],["Тёплые","#f2e2cf"]],"wall":true,"cost":12},{"id":"mus2","name":"Пианино","items":[["piano",78,150,1,null]],"cost":12},{"id":"mus3","name":"Гитара на стойке","items":[["guitar",160,150,1,null]],"cost":12},{"id":"mus4","name":"Барабан","items":[["drum",214,150,1,null]],"cost":12},{"id":"mus5","name":"Граммофон","items":[["gramophone",300,198,1,null]],"cost":12},{"id":"mus6","name":"Пюпитр с нотами","items":[["notestand",140,198,1,null]],"cost":12},{"id":"mus7","name":"Ковёр","items":[["rug",170,190,1,"choice"]],"choices":[["Синий","#3d5f9e"],["Красный","#c0573f"]],"cost":12},{"id":"mus8","name":"Люстра","items":[["chandelier",150,0,1,null]],"cost":12},{"id":"mus9","name":"Шторы","items":[["curtains",265,94,0.76,"choice"]],"choices":[["Терракотовые","#e07a5f"],["Синие","#5b8fd6"]],"cost":12},{"id":"mus10","name":"Постер с концерта","items":[["poster",172,72,1,"choice"]],"choices":[["Розовый","#ffb4c8"],["Голубой","#9fd0f5"]],"cost":13},{"id":"mus11","name":"Полка с пластинками","items":[["shelf",78,72,1,null]],"cost":13},{"id":"mus12","name":"Растение","items":[["tallplant",22,198,0.85,null]],"cost":13}],"bg":"in","win":[230,36,70,58]},{"id":"cons","name":"Зимний сад","story":"Стеклянная комната, где цветы растут даже зимой.","tasks":[{"id":"cons1","name":"Застеклить рамы","choices":[["Белые рамы","#ffffff"],["Зелёные рамы","#4e8f5f"]],"wall":true,"cost":13},{"id":"cons2","name":"Пальма","items":[["tallplant",30,150,1.1,null]],"cost":13},{"id":"cons3","name":"Фикус","items":[["tallplant",292,150,1.1,null]],"cost":13},{"id":"cons4","name":"Цветы в горшках","items":[["plant",82,150,1,null],["plant",238,150,1,null]],"cost":13},{"id":"cons5","name":"Лимонное дерево","items":[["appletree",190,150,0.7,"#ffd23f"]],"cost":13},{"id":"cons6","name":"Скамейка","items":[["bench_in",120,152,1,null]],"cost":13},{"id":"cons7","name":"Фонтанчик","items":[["fountain",160,198,0.8,null]],"cost":13},{"id":"cons8","name":"Плетёное кресло","items":[["armchair",80,198,0.9,"choice"]],"choices":[["Песочное","#d9b98a"],["Белое","#f4f4f4"]],"cost":13},{"id":"cons9","name":"Птичья клетка","items":[["birdcage",250,20,1,null]],"cost":13},{"id":"cons10","name":"Лейка","items":[["wateringcan",220,198,1,null]],"cost":14},{"id":"cons11","name":"Гирлянда","items":[["lights",160,8,1,null]],"cost":14},{"id":"cons12","name":"Аквариум","items":[["aquarium",280,198,0.9,null]],"cost":14}],"bg":"glass"},{"id":"att","name":"Чердак","story":"На чердаке горы старых вещей и тайн. Наведём порядок!","tasks":[{"id":"att1","name":"Разобрать завалы","choices":[["Светлое дерево","#e8d2ae"],["Тёмное дерево","#b98c5e"]],"wall":true,"cost":14},{"id":"att2","name":"Старый сундук","items":[["trunk",60,150,1,null]],"cost":14},{"id":"att3","name":"Коробки с вещами","items":[["boxes",250,150,1,null]],"cost":14},{"id":"att4","name":"Телескоп у окна","items":[["telescope",170,152,1,null]],"cost":14},{"id":"att5","name":"Старое кресло","items":[["armchair",104,198,1,"choice"]],"choices":[["Зелёное","#5a8f7b"],["Бордовое","#8e2f3c"]],"cost":14},{"id":"att6","name":"Торшер","items":[["floorlamp",28,152,1,null]],"cost":14},{"id":"att7","name":"Ковёр","items":[["rug",170,190,1,"choice"]],"choices":[["Лоскутный","#d98e4e"],["Синий","#3d5f9e"]],"cost":14},{"id":"att8","name":"Гирлянда","items":[["lights",170,30,1,null]],"cost":14},{"id":"att9","name":"Стопка книг","items":[["bookstack",280,198,1,null]],"cost":14},{"id":"att10","name":"Картина в раме","items":[["painting",300,150,1,null]],"cost":15},{"id":"att11","name":"Ящик с игрушками","items":[["toybox",214,198,0.9,"#e07a5f"]],"cost":15},{"id":"att12","name":"Кот на чердаке","items":[["catbed",150,198,0.9,null]],"cost":15}],"bg":"attic"},{"id":"pan","name":"Кладовая","story":"Запасы на зиму: соленья, варенья, мука и картошка.","tasks":[{"id":"pan1","name":"Побелить стены","choices":[["Белые","#efece4"],["Жёлтые","#f3e7c2"]],"wall":true,"cost":15},{"id":"pan2","name":"Полка с соленьями","items":[["jars",64,96,1,null]],"cost":15},{"id":"pan3","name":"Полка с вареньем","items":[["jars",204,96,1,null]],"cost":15},{"id":"pan4","name":"Бочки","items":[["barrel",46,150,1,null],["barrel",86,150,1,null]],"cost":15},{"id":"pan5","name":"Корзина картошки","items":[["basket",160,198,1,null]],"cost":15},{"id":"pan6","name":"Коробки","items":[["boxes",256,150,1,null]],"cost":15},{"id":"pan7","name":"Лампочка","items":[["bulb",160,0,0.9,null]],"cost":15},{"id":"pan8","name":"Мешок муки","items":[["sack",304,150,1,null]],"cost":15},{"id":"pan9","name":"Тыквы","items":[["pumpkin",220,198,1,null]],"cost":15},{"id":"pan10","name":"Связки лука","items":[["onions",134,22,1,null]],"cost":16},{"id":"pan11","name":"Лестница","items":[["ladder",140,152,0.8,null]],"cost":16},{"id":"pan12","name":"Кот-мышелов","items":[["catbed",86,198,0.9,null]],"cost":16}],"bg":"cellar"},{"id":"gar","name":"Сад","story":"Дом внутри готов! Теперь сад перед домом — его видно с дороги.","tasks":[{"id":"gar1","name":"Подстричь газон","cost":8},{"id":"gar2","name":"Покрасить забор","choices":[["Белый","#ffffff"],["Голубой","#9cc9f0"]],"cost":8},{"id":"gar3","name":"Клумба с цветами","cost":9},{"id":"gar4","name":"Скамейка и фонарь","cost":10},{"id":"gar5","name":"Яблоня","items":[["appletree",16,150,0.8,null]],"cost":16},{"id":"gar6","name":"Дорожка к крыльцу","items":[["path",95,200,1,null]],"cost":16},{"id":"gar7","name":"Почтовый ящик","items":[["mailbox",170,150,0.9,null]],"cost":16},{"id":"gar8","name":"Кусты у дома","items":[["bush",150,126,0.8,null]],"cost":16},{"id":"gar9","name":"Скворечник","items":[["birdhouse",236,150,0.8,null]],"cost":16},{"id":"gar10","name":"Садовый гном","items":[["gnome",132,198,0.9,null]],"cost":17},{"id":"gar11","name":"Камни у клумбы","items":[["rocks",306,198,0.8,null]],"cost":17},{"id":"gar12","name":"Велосипед","items":[["bicycle",210,199,0.8,null]],"cost":17}]},{"id":"ver","name":"Веранда","story":"Летние вечера на веранде с чаем и пирогами.","tasks":[{"id":"ver1","name":"Покрасить стену","choices":[["Белая","#f3efe6"],["Голубая","#cfe2f0"]],"wall":true,"cost":17},{"id":"ver2","name":"Шезлонг","items":[["deckchair",58,152,1,"choice"]],"choices":[["Синий","#2f7ff0"],["Красный","#ef4e3a"]],"cost":17},{"id":"ver3","name":"Столик с зонтом","items":[["umbrellatable",170,152,1,null]],"cost":17},{"id":"ver4","name":"Стулья","items":[["chair",128,154,1,null],["chair",214,154,1,null]],"cost":17},{"id":"ver5","name":"Гирлянда","items":[["lights",160,18,1,null]],"cost":17},{"id":"ver6","name":"Цветы в горшках","items":[["plant",22,198,1,null],["plant",300,198,1,null]],"cost":17},{"id":"ver7","name":"Фонарь","items":[["lantern",300,152,0.9,null]],"cost":17},{"id":"ver8","name":"Гриль","items":[["grill",258,198,1,null]],"cost":17},{"id":"ver9","name":"Кот греется","items":[["catbed",104,198,0.9,null]],"cost":17},{"id":"ver10","name":"Половик","items":[["rug",170,192,1,"choice"]],"choices":[["Полосатый","#e07a5f"],["Синий","#5b8fd6"]],"cost":18},{"id":"ver11","name":"Птичья клетка","items":[["birdcage",290,6,0.9,null]],"cost":18},{"id":"ver12","name":"Ящик с цветами","items":[["flowers",238,152,0.9,null]],"cost":18}],"bg":"veranda"},{"id":"veg","name":"Огород","story":"Свои овощи вкуснее! Разобьём огород за домом.","tasks":[{"id":"veg1","name":"Расчистить участок","grass":true,"cost":18},{"id":"veg2","name":"Забор","items":[["fencerow",160,128,1,null]],"cost":18},{"id":"veg3","name":"Грядка моркови","items":[["vegbed",64,176,1,"#ff8a1f"]],"cost":18},{"id":"veg4","name":"Грядка капусты","items":[["vegbed",160,176,1,"#8fd16a"]],"cost":18},{"id":"veg5","name":"Грядка помидоров","items":[["vegbed",256,176,1,"#ef4e3a"]],"cost":18},{"id":"veg6","name":"Пугало","items":[["scarecrow",160,150,1,null]],"cost":18},{"id":"veg7","name":"Тачка","items":[["wheelbarrow",292,198,0.9,null]],"cost":18},{"id":"veg8","name":"Лейка","items":[["wateringcan",28,198,1,null]],"cost":18},{"id":"veg9","name":"Тыквы","items":[["pumpkin",110,198,1,null]],"cost":18},{"id":"veg10","name":"Подсолнухи","items":[["sunflowers",296,130,1,null]],"cost":19},{"id":"veg11","name":"Яблоня","items":[["appletree",30,128,0.8,null]],"cost":19},{"id":"veg12","name":"Поленница","items":[["woodpile",232,128,0.8,null]],"cost":19}],"bg":"out"},{"id":"pond","name":"Пруд","story":"В низине можно выкопать пруд. Утки уже прилетели посмотреть.","tasks":[{"id":"pond1","name":"Расчистить берег","grass":true,"cost":19},{"id":"pond2","name":"Выкопать пруд","items":[["pond",160,186,1,null]],"cost":19},{"id":"pond3","name":"Утки","items":[["ducks",140,172,1,null]],"cost":19},{"id":"pond4","name":"Лодочка","items":[["boat",214,176,0.9,null]],"cost":19},{"id":"pond5","name":"Камыши","items":[["reeds",86,166,1,null]],"cost":19},{"id":"pond6","name":"Скамейка","items":[["bench_out",272,150,0.9,null]],"cost":19},{"id":"pond7","name":"Плакучая ива","items":[["tree",40,132,1,"#6fbf5f"]],"cost":19},{"id":"pond8","name":"Камни","items":[["rocks",110,198,1,null]],"cost":19},{"id":"pond9","name":"Фонарь","items":[["lantern",308,152,0.9,null]],"cost":20},{"id":"pond10","name":"Мостик","items":[["bridge",236,148,0.8,null]],"cost":20},{"id":"pond11","name":"Цветы на берегу","items":[["flowers",30,198,1,null]],"cost":20},{"id":"pond12","name":"Скворечник","items":[["birdhouse",120,132,0.8,null]],"cost":20}],"bg":"out"},{"id":"gaz","name":"Беседка","story":"Тихий уголок для чаепитий и разговоров.","tasks":[{"id":"gaz1","name":"Подготовить площадку","grass":true,"cost":20},{"id":"gaz2","name":"Беседка","items":[["gazebo",164,142,1,null]],"cost":20},{"id":"gaz3","name":"Дорожка","items":[["path",164,200,1.2,null]],"cost":20},{"id":"gaz4","name":"Арка с розами","items":[["arch",70,152,0.9,null]],"cost":20},{"id":"gaz5","name":"Скамейка","items":[["bench_out",272,198,0.9,null]],"cost":20},{"id":"gaz6","name":"Гирлянда","items":[["lights",164,30,0.8,null]],"cost":20},{"id":"gaz7","name":"Кусты","items":[["bush",118,150,0.7,null],["bush",214,150,0.7,null]],"cost":20},{"id":"gaz8","name":"Дерево","items":[["tree",26,124,0.9,null]],"cost":20},{"id":"gaz9","name":"Гамак","items":[["hammock",272,140,0.8,null]],"cost":21},{"id":"gaz10","name":"Цветы","items":[["flowers",30,198,1,null]],"cost":21},{"id":"gaz11","name":"Фонарик","items":[["lantern",112,198,0.8,null]],"cost":21},{"id":"gaz12","name":"Садовый гном","items":[["gnome",306,198,0.8,null]],"cost":21}],"bg":"out"},{"id":"yard","name":"Двор и гараж","story":"Дедушкин гараж и двор. Тут найдётся место и для машины, и для собаки.","tasks":[{"id":"yard1","name":"Расчистить двор","grass":true,"cost":21},{"id":"yard2","name":"Гараж","items":[["garage",72,150,1,"choice"]],"choices":[["Серые ворота","#9aa3ac"],["Зелёные ворота","#5a8f7b"]],"cost":21},{"id":"yard3","name":"Машина","items":[["car",72,194,1,"choice"]],"choices":[["Красная","#ef4e3a"],["Синяя","#2f7ff0"]],"cost":21},{"id":"yard4","name":"Велосипед","items":[["bicycle",162,198,0.9,null]],"cost":21},{"id":"yard5","name":"Почтовый ящик","items":[["mailbox",300,150,1,null]],"cost":21},{"id":"yard6","name":"Будка с собакой","items":[["doghouse",214,152,0.9,null]],"cost":21},{"id":"yard7","name":"Фонарь","items":[["lantern",150,152,0.9,null]],"cost":21},{"id":"yard8","name":"Баскетбольное кольцо","items":[["hoop",264,152,0.8,null]],"cost":22},{"id":"yard9","name":"Поленница","items":[["woodpile",300,198,0.8,null]],"cost":22},{"id":"yard10","name":"Клумба","items":[["flowers",236,198,1,null]],"cost":22},{"id":"yard11","name":"Куст сирени","items":[["bush",150,128,0.8,"#a77fd8"]],"cost":22},{"id":"yard12","name":"Дерево","items":[["tree",230,122,0.8,null]],"cost":22}],"bg":"out"},{"id":"play","name":"Детская площадка","story":"Для внуков — горка, качели и песочница!","tasks":[{"id":"play1","name":"Расчистить площадку","grass":true,"cost":22},{"id":"play2","name":"Песочница","items":[["sandbox",70,198,1,null]],"cost":22},{"id":"play3","name":"Горка","items":[["slide",150,152,1,null]],"cost":22},{"id":"play4","name":"Качели","items":[["swing",262,152,1,null]],"cost":22},{"id":"play5","name":"Батут","items":[["trampoline",62,152,1,null]],"cost":22},{"id":"play6","name":"Домик","items":[["playhouse",206,152,0.8,null]],"cost":22},{"id":"play7","name":"Качалка-балансир","items":[["seesaw",170,198,0.9,null]],"cost":22},{"id":"play8","name":"Скамейка для взрослых","items":[["bench_out",290,198,0.8,null]],"cost":23},{"id":"play9","name":"Дерево для тени","items":[["tree",308,122,0.8,null]],"cost":23},{"id":"play10","name":"Цветы","items":[["flowers",232,198,0.8,null]],"cost":23},{"id":"play11","name":"Воздушный змей","items":[["kite",110,60,1,null]],"cost":23},{"id":"play12","name":"Куст","items":[["bush",20,124,0.8,null]],"cost":23}],"bg":"out"},{"id":"orch","name":"Пасека и сад","story":"Фруктовые деревья и ульи — будет и мёд, и варенье.","tasks":[{"id":"orch1","name":"Подготовить землю","grass":true,"cost":23},{"id":"orch2","name":"Изгородь","items":[["fencerow",160,126,1,"#d9b98a"]],"cost":23},{"id":"orch3","name":"Яблоня","items":[["appletree",40,142,0.9,null]],"cost":23},{"id":"orch4","name":"Груша","items":[["appletree",110,142,0.9,"#c6d84a"]],"cost":23},{"id":"orch5","name":"Вишня","items":[["appletree",180,142,0.9,"#a8102a"]],"cost":23},{"id":"orch6","name":"Ульи","items":[["beehive",240,198,1,null],["beehive",290,198,1,null]],"cost":23},{"id":"orch7","name":"Колодец","items":[["well",272,150,0.9,null]],"cost":24},{"id":"orch8","name":"Скамейка","items":[["bench_out",70,198,0.9,null]],"cost":24},{"id":"orch9","name":"Подсолнухи","items":[["sunflowers",216,148,0.9,null]],"cost":24},{"id":"orch10","name":"Цветы","items":[["flowers",150,198,1,null]],"cost":24},{"id":"orch11","name":"Тачка","items":[["wheelbarrow",196,198,0.8,null]],"cost":24},{"id":"orch12","name":"Фонарь","items":[["lantern",314,152,0.8,null]],"cost":24}],"bg":"out"},{"id":"gh","name":"Теплица","story":"Последний штрих — теплица. А потом — большое новоселье!","tasks":[{"id":"gh1","name":"Расчистить место","grass":true,"cost":24},{"id":"gh2","name":"Теплица","items":[["greenhouse",156,152,1,null]],"cost":24},{"id":"gh3","name":"Рассада в горшках","items":[["plant",40,152,0.8,null],["plant",62,152,0.8,null],["plant",84,152,0.8,null]],"cost":24},{"id":"gh4","name":"Грядка","items":[["vegbed",60,192,0.9,"#ef4e3a"]],"cost":24},{"id":"gh5","name":"Ещё грядка","items":[["vegbed",252,192,0.9,"#8fd16a"]],"cost":24},{"id":"gh6","name":"Лейка","items":[["wateringcan",156,198,1,null]],"cost":24},{"id":"gh7","name":"Подсолнухи","items":[["sunflowers",20,128,0.8,null]],"cost":25},{"id":"gh8","name":"Бочка для дождя","items":[["barrel",290,152,1,null]],"cost":25},{"id":"gh9","name":"Дорожка","items":[["path",156,206,1,null]],"cost":25},{"id":"gh10","name":"Садовый гном","items":[["gnome",232,152,0.8,null]],"cost":25},{"id":"gh11","name":"Фонарь","items":[["lantern",314,152,0.8,null]],"cost":25},{"id":"gh12","name":"Тыквы","items":[["pumpkin",112,198,1,null]],"cost":25}],"bg":"out"}];
+/* ---------- Библиотека предметов для дома (рисуются от нижней середины, вверх) ---------- */
+const DK='rgba(0,0,0,.18)',LT='rgba(255,255,255,.35)';
+const IT={
+ painting:c=>`<rect x="-20" y="-30" width="40" height="30" rx="2" fill="#fff" stroke="#c9a24a" stroke-width="3"/><path d="M-16-4l10-12 7 7 6-9 9 14z" fill="${c||'#7fb0d8'}"/><circle cx="10" cy="-22" r="3" fill="#ffd23f"/>`,
+ poster:c=>`<rect x="-14" y="-38" width="28" height="38" rx="2" fill="${c||'#ffb4c8'}" stroke="#fff" stroke-width="2"/><circle cx="0" cy="-25" r="7" fill="#fff" opacity=".85"/><rect x="-8" y="-12" width="16" height="3" fill="#fff" opacity=".85"/><rect x="-6" y="-7" width="12" height="2" fill="#fff" opacity=".6"/>`,
+ clock:()=>`<circle cx="0" cy="-12" r="12" fill="#fff" stroke="#8a5c2f" stroke-width="3"/><path d="M0-12V-19M0-12l5 3" stroke="#333" stroke-width="2" stroke-linecap="round"/>`,
+ photos:()=>`<rect x="-26" y="-22" width="14" height="18" fill="#fff" stroke="#8a5c2f" stroke-width="2"/><rect x="-7" y="-26" width="16" height="22" fill="#fff" stroke="#8a5c2f" stroke-width="2"/><rect x="14" y="-20" width="13" height="16" fill="#fff" stroke="#8a5c2f" stroke-width="2"/><circle cx="-19" cy="-15" r="3" fill="#e07a5f"/><circle cx="1" cy="-18" r="4" fill="#7fb0d8"/><circle cx="20" cy="-13" r="3" fill="#22b14c"/>`,
+ shelf:()=>`<rect x="-28" y="-4" width="56" height="4" fill="#8a5c2f"/><rect x="-24" y="-20" width="6" height="16" fill="#ef4e3a"/><rect x="-17" y="-17" width="5" height="13" fill="#2f7ff0"/><rect x="-11" y="-22" width="7" height="18" fill="#22b14c"/><path d="M4-4c-2-10 10-10 8 0z" fill="#e2408c"/><circle cx="20" cy="-10" r="5" fill="#3fa34d"/><rect x="17" y="-7" width="6" height="3" fill="#c0573f"/>`,
+ jars:()=>`<rect x="-28" y="-4" width="56" height="4" fill="#8a5c2f"/><rect x="-28" y="-30" width="56" height="3" fill="#8a5c2f"/><g><rect x="-25" y="-17" width="10" height="13" rx="2" fill="#ef4e3a" opacity=".85"/><rect x="-25" y="-19" width="10" height="3" fill="#c9a24a"/><rect x="-12" y="-15" width="9" height="11" rx="2" fill="#ffc21a" opacity=".85"/><rect x="-12" y="-17" width="9" height="3" fill="#c9a24a"/><rect x="0" y="-18" width="11" height="14" rx="2" fill="#22b14c" opacity=".85"/><rect x="0" y="-20" width="11" height="3" fill="#c9a24a"/><rect x="14" y="-14" width="10" height="10" rx="2" fill="#8a4fd6" opacity=".85"/><rect x="14" y="-16" width="10" height="3" fill="#c9a24a"/></g><rect x="-22" y="-44" width="9" height="14" rx="2" fill="#ff8a1f" opacity=".85"/><rect x="-6" y="-42" width="12" height="12" rx="2" fill="#e2408c" opacity=".85"/><rect x="12" y="-45" width="9" height="15" rx="2" fill="#7fc4ff" opacity=".85"/>`,
+ plant:()=>`<path d="M-9-14h18l-3 14h-12z" fill="#c0573f"/><ellipse cx="-6" cy="-22" rx="5" ry="10" fill="#3fa34d" transform="rotate(-25 -6 -22)"/><ellipse cx="6" cy="-22" rx="5" ry="10" fill="#56b85f" transform="rotate(25 6 -22)"/><ellipse cx="0" cy="-26" rx="5" ry="11" fill="#2e8b3a"/>`,
+ tallplant:()=>`<path d="M-11-16h22l-4 16h-14z" fill="#c0573f"/><rect x="-1.5" y="-50" width="3" height="36" fill="#7a5c2e"/><g fill="#3fa34d"><ellipse cx="-10" cy="-48" rx="8" ry="14" transform="rotate(-30 -10 -48)"/><ellipse cx="10" cy="-52" rx="8" ry="14" transform="rotate(30 10 -52)"/><ellipse cx="0" cy="-62" rx="8" ry="15"/></g><ellipse cx="-12" cy="-34" rx="6" ry="11" transform="rotate(-50 -12 -34)" fill="#56b85f"/><ellipse cx="12" cy="-36" rx="6" ry="11" transform="rotate(50 12 -36)" fill="#56b85f"/>`,
+ vase:()=>`<path d="M-6 0c-6-8-6-16 0-20h12c6 4 6 12 0 20z" fill="#7fc4ff"/><g stroke="#2e8b3a" stroke-width="2"><line x1="0" y1="-20" x2="-6" y2="-32"/><line x1="0" y1="-20" x2="6" y2="-34"/><line x1="0" y1="-20" x2="0" y2="-36"/></g><circle cx="-6" cy="-33" r="4" fill="#ef4e3a"/><circle cx="6" cy="-35" r="4" fill="#ffd23f"/><circle cx="0" cy="-38" r="4" fill="#e2408c"/>`,
+ fruitbowl:()=>`<circle cx="-7" cy="-8" r="5" fill="#ef4e3a"/><circle cx="2" cy="-10" r="5" fill="#ff8a1f"/><circle cx="9" cy="-7" r="4" fill="#8a4fd6"/><path d="M-5-14c4-4 10-4 12 0" stroke="#ffd23f" stroke-width="4" fill="none"/><path d="M-16-6h32c-2 6-8 6-16 6s-14 0-16-6z" fill="#f4f7fa" stroke="#c9d1d8" stroke-width="1.5"/>`,
+ curtains:c=>`<rect x="-48" y="-66" width="96" height="4" rx="2" fill="#8a5c2f"/><path d="M-46-62h18c-3 20 2 42 7 62h-25z" fill="${c||'#e07a5f'}"/><path d="M46-62h-18c3 20-2 42-7 62h25z" fill="${c||'#e07a5f'}"/><path d="M-40-62v62M40-62v62" stroke="${DK}" stroke-width="2"/>`,
+ armchair:c=>`<rect x="-20" y="-42" width="40" height="28" rx="9" fill="${c||'#8a4fd6'}"/><rect x="-24" y="-24" width="48" height="16" rx="6" fill="${c||'#8a4fd6'}"/><rect x="-28" y="-32" width="9" height="26" rx="4" fill="${c||'#8a4fd6'}"/><rect x="-28" y="-32" width="9" height="26" rx="4" fill="${DK}"/><rect x="19" y="-32" width="9" height="26" rx="4" fill="${c||'#8a4fd6'}"/><rect x="19" y="-32" width="9" height="26" rx="4" fill="${DK}"/><rect x="-20" y="-8" width="4" height="8" fill="#6b4421"/><rect x="16" y="-8" width="4" height="8" fill="#6b4421"/>`,
+ sofa:c=>`<rect x="-46" y="-40" width="92" height="24" rx="9" fill="${c||'#5a8f7b'}"/><rect x="-50" y="-22" width="100" height="16" rx="6" fill="${c||'#5a8f7b'}"/><rect x="-54" y="-30" width="11" height="26" rx="5" fill="${c||'#5a8f7b'}"/><rect x="-54" y="-30" width="11" height="26" rx="5" fill="${DK}"/><rect x="43" y="-30" width="11" height="26" rx="5" fill="${c||'#5a8f7b'}"/><rect x="43" y="-30" width="11" height="26" rx="5" fill="${DK}"/><rect x="-36" y="-36" width="30" height="16" rx="6" fill="${LT}"/><rect x="6" y="-36" width="30" height="16" rx="6" fill="${LT}"/><rect x="-46" y="-6" width="5" height="6" fill="#6b4421"/><rect x="41" y="-6" width="5" height="6" fill="#6b4421"/>`,
+ coffeetable:()=>`<rect x="-26" y="-18" width="52" height="6" rx="3" fill="#a9743e"/><rect x="-22" y="-12" width="4" height="12" fill="#8a5c2f"/><rect x="18" y="-12" width="4" height="12" fill="#8a5c2f"/><rect x="-6" y="-25" width="9" height="7" rx="2" fill="#fff"/><path d="M3-23h3v4h-3" stroke="#fff" stroke-width="2" fill="none"/>`,
+ table:()=>`<rect x="-42" y="-30" width="84" height="7" rx="3" fill="#a9743e"/><rect x="-38" y="-23" width="5" height="23" fill="#8a5c2f"/><rect x="33" y="-23" width="5" height="23" fill="#8a5c2f"/><rect x="-36" y="-34" width="72" height="4" rx="2" fill="#fff" opacity=".7"/>`,
+ chair:c=>`<rect x="-10" y="-40" width="5" height="40" fill="#8a5c2f"/><rect x="-10" y="-40" width="20" height="16" rx="3" fill="${c||'#a9743e'}"/><rect x="-10" y="-20" width="22" height="5" rx="2" fill="${c||'#a9743e'}"/><rect x="8" y="-15" width="4" height="15" fill="#8a5c2f"/>`,
+ tv:()=>`<rect x="-30" y="-14" width="60" height="14" rx="2" fill="#8a5c2f"/><rect x="-24" y="-11" width="22" height="8" rx="1" fill="#a9743e"/><rect x="2" y="-11" width="22" height="8" rx="1" fill="#a9743e"/><rect x="-28" y="-50" width="56" height="34" rx="3" fill="#2d333d"/><rect x="-25" y="-47" width="50" height="28" fill="#4f8fd6"/><path d="M-25-24l14-12 10 8 12-10 14 14v5h-50z" fill="#5fbf5f"/><rect x="-3" y="-16" width="6" height="3" fill="#2d333d"/>`,
+ lamp:()=>`<path d="M-10-34h20l5 14h-30z" fill="#ffd977"/><rect x="-1.5" y="-20" width="3" height="16" fill="#8a5c2f"/><ellipse cx="0" cy="-3" rx="8" ry="3" fill="#8a5c2f"/>`,
+ floorlamp:()=>`<rect x="-2" y="-70" width="4" height="70" fill="#7a5c2e"/><path d="M-14-70h28l-6-20h-16z" fill="#ffd977"/><ellipse cx="0" cy="-1" rx="12" ry="3" fill="#7a5c2e"/><ellipse cx="0" cy="-66" rx="24" ry="9" fill="#fff3b0" opacity=".35"/>`,
+ chandelier:()=>`<line x1="0" y1="0" x2="0" y2="18" stroke="#555" stroke-width="2"/><path d="M-22 22h44" stroke="#c9a24a" stroke-width="3"/><path d="M-22 22c0 8 8 12 22 12s22-4 22-12" stroke="#c9a24a" stroke-width="2" fill="none"/><g fill="#fff"><rect x="-24" y="14" width="4" height="8"/><rect x="-2" y="12" width="4" height="10"/><rect x="20" y="14" width="4" height="8"/></g><g fill="#ffd23f"><circle cx="-22" cy="12" r="2.5"/><circle cx="0" cy="10" r="2.5"/><circle cx="22" cy="12" r="2.5"/></g><ellipse cx="0" cy="30" rx="34" ry="12" fill="#fff3b0" opacity=".3"/>`,
+ bulb:()=>`<line x1="0" y1="0" x2="0" y2="22" stroke="#555" stroke-width="2"/><path d="M-12 30a12 8 0 0 1 24 0z" fill="#9aa3ac"/><circle cx="0" cy="33" r="4" fill="#ffd23f"/><ellipse cx="0" cy="40" rx="28" ry="14" fill="#fff3b0" opacity=".3"/>`,
+ lights:()=>{let s='<path d="M-70 0q35 18 70 0t70 0" stroke="#555" stroke-width="1.5" fill="none"/>';[-60,-45,-30,-15,0,15,30,45,60].forEach((x,i)=>{const y=Math.abs(Math.sin((x+70)/140*Math.PI*2))*9;s+=`<circle cx="${x}" cy="${y+4}" r="3.5" fill="${['#ffd23f','#ef4e3a','#22b14c','#2f7ff0','#e2408c'][i%5]}"/>`});return s},
+ rug:c=>`<ellipse cx="0" cy="-4" rx="52" ry="10" fill="${c||'#e07a5f'}"/><ellipse cx="0" cy="-4" rx="40" ry="6" fill="none" stroke="#fff" stroke-width="2" opacity=".6"/>`,
+ mirror:()=>`<ellipse cx="0" cy="-22" rx="15" ry="22" fill="#d6ecff" stroke="#c9a24a" stroke-width="4"/><path d="M-6-34l9-6" stroke="#fff" stroke-width="3" opacity=".8"/>`,
+ dresser:c=>`<rect x="-26" y="-36" width="52" height="34" rx="3" fill="${c||'#b07d4e'}"/><rect x="-22" y="-32" width="44" height="8" rx="2" fill="${DK}"/><rect x="-22" y="-21" width="44" height="8" rx="2" fill="${DK}"/><rect x="-22" y="-10" width="44" height="6" rx="2" fill="${DK}"/><g fill="#ffd977"><circle cx="0" cy="-28" r="1.6"/><circle cx="0" cy="-17" r="1.6"/><circle cx="0" cy="-7" r="1.6"/></g><rect x="-24" y="-2" width="4" height="2" fill="#6b4421"/><rect x="20" y="-2" width="4" height="2" fill="#6b4421"/>`,
+ buffet:()=>`<rect x="-28" y="-80" width="56" height="80" rx="3" fill="#8a5c2f"/><rect x="-24" y="-76" width="48" height="38" fill="#d6ecff" opacity=".8"/><line x1="0" y1="-76" x2="0" y2="-38" stroke="#8a5c2f" stroke-width="2"/><g fill="#fff" stroke="#9fb8cf"><circle cx="-12" cy="-60" r="7"/><circle cx="12" cy="-60" r="7"/></g><rect x="-24" y="-34" width="48" height="30" fill="#a9743e"/><circle cx="-4" cy="-19" r="2" fill="#ffd977"/><circle cx="4" cy="-19" r="2" fill="#ffd977"/>`,
+ fireplace:()=>`<rect x="-34" y="-58" width="68" height="58" fill="#c0573f"/><path d="M-34-46h68M-34-34h68M-34-22h68M-34-10h68" stroke="#a84a34" stroke-width="1.5"/><rect x="-38" y="-62" width="76" height="6" fill="#8a5c2f"/><path d="M-18 0v-26a18 18 0 0 1 36 0v26z" fill="#2d333d"/><path d="M-10 0c-2-10 6-12 4-20 8 6 10 14 8 20z" fill="#ff8a1f"/><path d="M-4 0c0-6 4-8 4-12 4 4 4 8 4 12z" fill="#ffd23f"/>`,
+ piano:()=>`<rect x="-36" y="-62" width="72" height="54" rx="3" fill="#2d333d"/><rect x="-32" y="-30" width="64" height="8" fill="#fff"/><g fill="#2d333d">${[-26,-18,-6,2,10,22].map(x=>`<rect x="${x}" y="-30" width="4" height="5"/>`).join('')}</g><rect x="-34" y="-8" width="5" height="8" fill="#2d333d"/><rect x="29" y="-8" width="5" height="8" fill="#2d333d"/><rect x="-14" y="-12" width="28" height="5" rx="2" fill="#8a5c2f"/><rect x="-12" y="-7" width="3" height="7" fill="#6b4421"/><rect x="9" y="-7" width="3" height="7" fill="#6b4421"/>`,
+ guitar:()=>`<rect x="-1.5" y="-62" width="3" height="30" fill="#6b4421"/><rect x="-4" y="-68" width="8" height="8" rx="2" fill="#6b4421"/><ellipse cx="0" cy="-22" rx="11" ry="13" fill="#e0a05e"/><ellipse cx="0" cy="-36" rx="8" ry="9" fill="#e0a05e"/><circle cx="0" cy="-26" r="3.5" fill="#6b4421"/><path d="M-6 0l6-10 6 10" stroke="#555" stroke-width="2" fill="none"/>`,
+ drum:()=>`<ellipse cx="0" cy="-28" rx="18" ry="6" fill="#f4f7fa"/><rect x="-18" y="-28" width="36" height="22" fill="#ef4e3a"/><ellipse cx="0" cy="-6" rx="18" ry="6" fill="#c0392b"/><path d="M-18-24l9 14 9-14 9 14 9-14" stroke="#ffd23f" stroke-width="2" fill="none"/><path d="M-8-36l-10-12M8-36l10-12" stroke="#8a5c2f" stroke-width="3"/>`,
+ gramophone:()=>`<rect x="-16" y="-16" width="32" height="16" rx="2" fill="#8a5c2f"/><ellipse cx="0" cy="-17" rx="14" ry="3" fill="#2d333d"/><path d="M4-18l6-18" stroke="#c9a24a" stroke-width="3"/><path d="M6-34c4-10 18-18 26-12-4 8-14 16-26 12z" fill="#c9a24a"/>`,
+ notestand:()=>`<path d="M0 0v-40M-8 0l8-6 8 6" stroke="#555" stroke-width="2.5" fill="none"/><rect x="-14" y="-56" width="28" height="18" rx="2" fill="#2d333d"/><rect x="-11" y="-53" width="22" height="12" fill="#fff"/><path d="M-8-49h16M-8-45h16" stroke="#333" stroke-width="1"/>`,
+ bookcase:()=>`<rect x="-26" y="-96" width="52" height="96" rx="3" fill="#8a5c2f"/>${[-90,-62,-34].map((y,k)=>`<rect x="-22" y="${y}" width="44" height="24" fill="#6b4421"/>${[0,1,2,3,4,5].map(i=>`<rect x="${-20+i*7}" y="${y+4+(i%2)*3}" width="6" height="${18-(i%2)*3}" fill="${['#ef4e3a','#2f7ff0','#ffc21a','#22b14c','#8a4fd6','#e2408c'][(i+k)%6]}"/>`).join('')}`).join('')}<rect x="-22" y="-6" width="44" height="4" fill="#6b4421"/>`,
+ bookstack:()=>`<rect x="-14" y="-6" width="28" height="6" rx="1" fill="#2f7ff0"/><rect x="-12" y="-12" width="24" height="6" rx="1" fill="#ef4e3a"/><rect x="-15" y="-18" width="27" height="6" rx="1" fill="#22b14c"/><rect x="-10" y="-24" width="22" height="6" rx="1" fill="#ffc21a"/>`,
+ catbed:()=>`<ellipse cx="0" cy="-5" rx="22" ry="7" fill="#c9a24a"/><ellipse cx="0" cy="-8" rx="17" ry="5" fill="#e8d5b5"/><ellipse cx="-2" cy="-12" rx="12" ry="7" fill="#ff8a1f"/><circle cx="9" cy="-15" r="6" fill="#ff8a1f"/><path d="M5-20l2-5 3 4M10-20l3-5 2 5" fill="#ff8a1f"/><path d="M7-15h2M11-15h2" stroke="#333" stroke-width="1.2"/><path d="M-14-10q-6 2-2 6" stroke="#ff8a1f" stroke-width="3" fill="none"/>`,
+ aquarium:()=>`<rect x="-26" y="-6" width="52" height="6" fill="#8a5c2f"/><rect x="-24" y="-38" width="48" height="32" rx="2" fill="#9fdcff" opacity=".85" stroke="#cfd6dc" stroke-width="2"/><path d="M-20-10c2-8 6-10 4-18M16-10c-2-6 2-10 0-16" stroke="#3fa34d" stroke-width="3" fill="none"/><path d="M-4-24l6-4v8z" fill="#ff8a1f"/><ellipse cx="-8" cy="-24" rx="5" ry="3" fill="#ff8a1f"/><ellipse cx="8" cy="-16" rx="4" ry="2.5" fill="#ffd23f"/><path d="M12-16l4-3v6z" fill="#ffd23f"/>`,
+ candles:()=>`<rect x="-12" y="-14" width="6" height="14" fill="#fff"/><rect x="-3" y="-20" width="6" height="20" fill="#fff"/><rect x="6" y="-11" width="6" height="11" fill="#fff"/><g fill="#ffb21f"><ellipse cx="-9" cy="-18" rx="2" ry="3.5"/><ellipse cx="0" cy="-24" rx="2" ry="3.5"/><ellipse cx="9" cy="-15" rx="2" ry="3.5"/></g>`,
+ basket:()=>`<path d="M-16-14h32l-4 14h-24z" fill="#c9a24a"/><path d="M-14-9h28M-13-4h26" stroke="#a9843a" stroke-width="2"/><path d="M-12-14c0-12 24-12 24 0" stroke="#a9843a" stroke-width="2.5" fill="none"/><circle cx="-6" cy="-16" r="4" fill="#e8d5b5"/><circle cx="3" cy="-17" r="4.5" fill="#d9c09a"/>`,
+ coatrack:()=>`<rect x="-2" y="-84" width="4" height="84" fill="#6b4421"/><path d="M-14 0l14-8 14 8" stroke="#6b4421" stroke-width="3" fill="none"/><path d="M-10-80l10 4 10-4" stroke="#6b4421" stroke-width="3" fill="none"/><path d="M-12-74h14l4 40h-22z" fill="#2f7ff0"/><path d="M4-74c8 0 10 10 8 18h-8z" fill="#ffc21a"/><ellipse cx="9" cy="-84" rx="9" ry="4" fill="#8a4fd6"/>`,
+ shoerack:()=>`<rect x="-26" y="-22" width="52" height="4" fill="#8a5c2f"/><rect x="-26" y="-4" width="52" height="4" fill="#8a5c2f"/><rect x="-26" y="-22" width="3" height="22" fill="#8a5c2f"/><rect x="23" y="-22" width="3" height="22" fill="#8a5c2f"/><path d="M-20-22h10q4 0 4-5h-10zM-2-22h12q3 0 3-6h-11zM14-4h8q3 0 3-6h-9zM-20-4h12q2 0 2-6h-10z" fill="#ef4e3a"/><path d="M-2-4h12q3 0 3-6h-13z" fill="#2d333d"/>`,
+ umbrella:()=>`<path d="M-9 0h18l2-22h-22z" fill="#7a8a9a"/><path d="M-4-20l-2-26M4-20l5-24" stroke="#555" stroke-width="2"/><path d="M-14-46a9 9 0 0 1 18 0z" fill="#ef4e3a"/><path d="M2-44a9 9 0 0 1 16 0z" fill="#2f7ff0"/>`,
+ bench_in:()=>`<rect x="-30" y="-20" width="60" height="7" rx="2" fill="#a9743e"/><rect x="-26" y="-13" width="4" height="13" fill="#8a5c2f"/><rect x="22" y="-13" width="4" height="13" fill="#8a5c2f"/><rect x="-20" y="-28" width="16" height="9" rx="4" fill="#e07a5f"/><rect x="2" y="-28" width="16" height="9" rx="4" fill="#7fb0d8"/>`,
+ telescope:()=>`<path d="M0-30l-12 30M0-30l12 30M0-30v30" stroke="#6b4421" stroke-width="2.5"/><rect x="-26" y="-48" width="46" height="9" rx="4" fill="#c9a24a" transform="rotate(-22 0 -40)"/><rect x="16" y="-56" width="10" height="12" rx="2" fill="#a9843a" transform="rotate(-22 0 -40)"/>`,
+ trunk:()=>`<rect x="-26" y="-26" width="52" height="26" rx="3" fill="#8a5c2f"/><path d="M-26-18c0-12 52-12 52 0" fill="#a9743e"/><rect x="-26" y="-18" width="52" height="4" fill="#c9a24a"/><rect x="-14" y="-26" width="4" height="26" fill="#c9a24a"/><rect x="10" y="-26" width="4" height="26" fill="#c9a24a"/><rect x="-3" y="-17" width="6" height="7" rx="1" fill="#ffd23f"/>`,
+ boxes:()=>`<rect x="-28" y="-26" width="30" height="26" fill="#d9a066"/><rect x="0" y="-22" width="28" height="22" fill="#c98f55"/><rect x="-18" y="-46" width="26" height="20" fill="#e0b07a"/><path d="M-28-13h30M0-11h28M-18-36h26" stroke="#b07d4e" stroke-width="2"/>`,
+ barrel:()=>`<path d="M-14 0c-4-10-4-26 0-36h28c4 10 4 26 0 36z" fill="#a9743e"/><path d="M-16-8h32M-16-28h32" stroke="#555" stroke-width="3"/><path d="M-6-36v36M6-36v36" stroke="#8a5c2f" stroke-width="1.5"/>`,
+ sack:()=>`<path d="M-14 0c-6-12-4-26 2-30h24c6 4 8 18 2 30z" fill="#e8d5b5"/><path d="M-10-30c4-6 16-6 20 0" stroke="#a9843a" stroke-width="3" fill="none"/><text x="0" y="-11" font-size="9" text-anchor="middle" fill="#8a5c2f" font-weight="700">МУКА</text>`,
+ onions:()=>`<path d="M-30 0h60" stroke="#8a5c2f" stroke-width="2"/>${[-24,-12,0,12,24].map((x,i)=>`<line x1="${x}" y1="0" x2="${x}" y2="${10+i%2*4}" stroke="#a9843a" stroke-width="1.5"/><ellipse cx="${x}" cy="${16+i%2*4}" rx="5" ry="6" fill="${i%2?'#f4e3c1':'#c9802e'}"/>`).join('')}`,
+ ladder:()=>`<path d="M-10 0l8-90M10 0l8-90" stroke="#a9743e" stroke-width="4"/>${[-12,-28,-44,-60,-76].map(y=>`<line x1="${-10-y*0.09}" y1="${y}" x2="${10-y*0.09}" y2="${y}" stroke="#a9743e" stroke-width="3"/>`).join('')}`,
+ globe:()=>`<rect x="-10" y="-4" width="20" height="4" fill="#555"/><rect x="-1.5" y="-12" width="3" height="8" fill="#555"/><circle cx="0" cy="-26" r="14" fill="#7fc4ff"/><path d="M-10-30q8 4 16-2M-8-18q6-4 14 0M-4-38q4 4 10 0" stroke="#22b14c" stroke-width="4" fill="none"/><path d="M-16-26a16 16 0 0 0 32 0" stroke="#c9a24a" stroke-width="2" fill="none"/>`,
+ birdcage:()=>`<line x1="0" y1="0" x2="0" y2="12" stroke="#555" stroke-width="2"/><path d="M-14 46v-20a14 14 0 0 1 28 0v20z" fill="none" stroke="#c9a24a" stroke-width="2"/><path d="M-7 46V18M0 46V12M7 46V18" stroke="#c9a24a" stroke-width="1.5"/><rect x="-16" y="44" width="32" height="4" fill="#c9a24a"/><ellipse cx="2" cy="34" rx="5" ry="4" fill="#ffd23f"/><circle cx="5" cy="30" r="3" fill="#ffd23f"/><path d="M8 30l3 1-3 1z" fill="#ff8a1f"/>`,
+ wateringcan:()=>`<rect x="-12" y="-18" width="22" height="18" rx="3" fill="#2f9e8f"/><path d="M10-14l14-10" stroke="#2f9e8f" stroke-width="4"/><path d="M-12-14c-8 0-8 10 0 10" stroke="#2f9e8f" stroke-width="3" fill="none"/><path d="M-8-18c0-8 14-8 14 0" stroke="#2f9e8f" stroke-width="3" fill="none"/>`,
+ toybox:c=>`<rect x="-22" y="-24" width="44" height="24" rx="3" fill="${c||'#2f7ff0'}"/><rect x="-24" y="-28" width="48" height="6" rx="2" fill="${c||'#2f7ff0'}"/><rect x="-24" y="-28" width="48" height="6" rx="2" fill="${DK}"/><circle cx="-8" cy="-13" r="5" fill="#ffd23f"/><rect x="2" y="-18" width="10" height="10" fill="#ef4e3a"/><path d="M-12-30l6-8 4 8" fill="#22b14c"/>`,
+ rockinghorse:()=>`<path d="M-26 0q26-10 52 0" stroke="#8a5c2f" stroke-width="4" fill="none"/><path d="M-16-4v-16M16-4v-16" stroke="#8a5c2f" stroke-width="3"/><rect x="-20" y="-28" width="34" height="12" rx="6" fill="#e0a05e"/><path d="M10-28l6-16 8 4-4 14z" fill="#e0a05e"/><path d="M14-44l-4 4 6 6" fill="#8a5c2f"/><circle cx="19" cy="-38" r="1.5" fill="#333"/><path d="M-20-24q-8 4-4 12" stroke="#8a5c2f" stroke-width="3" fill="none"/>`,
+ easel:()=>`<path d="M-14 0l14-70 14 70M0-70v70" stroke="#a9743e" stroke-width="3" fill="none"/><rect x="-18" y="-60" width="36" height="30" fill="#fff" stroke="#ddd"/><path d="M-14-34c6-10 12-4 18-14 4 6 8 8 10 4v10h-28z" fill="#7fb0d8"/><circle cx="8" cy="-52" r="4" fill="#ffd23f"/><rect x="-18" y="-30" width="36" height="3" fill="#a9743e"/>`,
+ bed:c=>`<rect x="-52" y="-46" width="10" height="46" rx="3" fill="#9c6b45"/><rect x="42" y="-30" width="8" height="30" rx="3" fill="#9c6b45"/><rect x="-44" y="-24" width="92" height="22" rx="5" fill="${c||'#7da7d9'}"/><rect x="-44" y="-30" width="92" height="10" rx="5" fill="#fff"/><rect x="-40" y="-40" width="28" height="13" rx="6" fill="#fff"/>`,
+ nightstand:()=>`<rect x="-14" y="-26" width="28" height="26" rx="2" fill="#a9743e"/><rect x="-11" y="-21" width="22" height="8" rx="1" fill="${DK}"/><circle cx="0" cy="-17" r="1.5" fill="#ffd977"/>`,
+ radio:()=>`<rect x="-16" y="-20" width="32" height="20" rx="5" fill="#e07a5f"/><circle cx="-6" cy="-10" r="6" fill="#f4e3c1"/><rect x="4" y="-15" width="8" height="3" fill="#f4e3c1"/><rect x="4" y="-9" width="8" height="3" fill="#f4e3c1"/><path d="M8-20l8-10" stroke="#555" stroke-width="1.5"/>`,
+ duck:()=>`<ellipse cx="0" cy="-7" rx="10" ry="7" fill="#ffd23f"/><circle cx="7" cy="-15" r="5" fill="#ffd23f"/><path d="M11-15l6 1-6 2z" fill="#ff8a1f"/><circle cx="8" cy="-16" r="1" fill="#333"/>`,
+ /* улица */
+ tree:c=>`<rect x="-5" y="-40" width="10" height="40" fill="#8a5c2f"/><circle cx="0" cy="-56" r="26" fill="${c||'#3fa34d'}"/><circle cx="-16" cy="-44" r="16" fill="${c||'#3fa34d'}"/><circle cx="16" cy="-46" r="17" fill="${c||'#3fa34d'}"/><circle cx="-6" cy="-64" r="12" fill="${LT}"/>`,
+ pine:()=>`<rect x="-4" y="-14" width="8" height="14" fill="#8a5c2f"/><path d="M0-80l-22 34h44zM0-64l-26 36h52zM0-46l-30 34h60z" fill="#2e8b3a"/>`,
+ appletree:c=>`<rect x="-5" y="-40" width="10" height="40" fill="#8a5c2f"/><circle cx="0" cy="-56" r="26" fill="#3fa34d"/><circle cx="-16" cy="-44" r="16" fill="#3fa34d"/><circle cx="16" cy="-46" r="17" fill="#3fa34d"/>${[[-10,-60],[8,-66],[14,-48],[-16,-44],[0,-46],[-4,-72],[18,-58]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="3.5" fill="${c||'#ef4e3a'}"/>`).join('')}`,
+ bush:c=>`<circle cx="-12" cy="-10" r="12" fill="${c||'#3fa34d'}"/><circle cx="10" cy="-11" r="13" fill="${c||'#3fa34d'}"/><circle cx="0" cy="-18" r="13" fill="${c||'#3fa34d'}"/><circle cx="-4" cy="-22" r="5" fill="${LT}"/>`,
+ flowers:()=>[[-20,-12,'#e2408c'],[-8,-16,'#ffd23f'],[4,-12,'#ef4e3a'],[16,-15,'#8a4fd6'],[-14,-6,'#ff8a1f'],[10,-6,'#fff']].map(([x,y,c])=>`<line x1="${x}" y1="${y}" x2="${x}" y2="0" stroke="#2e8b3a" stroke-width="2"/><circle cx="${x}" cy="${y}" r="5" fill="${c}"/><circle cx="${x}" cy="${y}" r="1.8" fill="#fff6c8"/>`).join(''),
+ sunflowers:()=>[[-12,-46],[6,-56],[20,-40]].map(([x,y])=>`<line x1="${x}" y1="${y}" x2="${x}" y2="0" stroke="#2e8b3a" stroke-width="3"/><circle cx="${x}" cy="${y}" r="9" fill="#ffc21a"/><circle cx="${x}" cy="${y}" r="4.5" fill="#6b4421"/><ellipse cx="${x-6}" cy="${y+18}" rx="6" ry="3" fill="#3fa34d"/>`).join(''),
+ pond:()=>`<ellipse cx="0" cy="-16" rx="80" ry="22" fill="#4fa3e0"/><ellipse cx="0" cy="-18" rx="70" ry="16" fill="#6dbaf0"/><ellipse cx="-30" cy="-16" rx="9" ry="4" fill="#3fa34d"/><circle cx="-28" cy="-18" r="3" fill="#ffb4c8"/><ellipse cx="34" cy="-12" rx="8" ry="3.5" fill="#3fa34d"/><path d="M-10-20q8-4 16 0M14-26q6-3 12 0" stroke="#fff" stroke-width="1.5" fill="none" opacity=".7"/>`,
+ ducks:()=>[[-12,0],[12,2]].map(([x,y])=>`<ellipse cx="${x}" cy="${y-6}" rx="9" ry="5" fill="#fff"/><circle cx="${x+7}" cy="${y-13}" r="4" fill="#2e8b3a"/><path d="M${x+10} ${y-13}l5 1-5 2z" fill="#ff8a1f"/>`).join(''),
+ boat:()=>`<path d="M-26-10h52l-8 10h-36z" fill="#c0573f"/><path d="M-22-10h44" stroke="#fff" stroke-width="2"/><path d="M-6-10l-14-12M6-10l14-12" stroke="#8a5c2f" stroke-width="2.5"/>`,
+ reeds:()=>[-14,-6,2,10,16].map((x,i)=>`<line x1="${x}" y1="0" x2="${x+(i%2?3:-2)}" y2="${-34-i*4}" stroke="#4e7e3a" stroke-width="2.5"/><rect x="${x+(i%2?1:-4)}" y="${-40-i*4}" width="4" height="12" rx="2" fill="#8a5c2f"/>`).join(''),
+ bridge:()=>`<path d="M-46 0q46-34 92 0" stroke="#a9743e" stroke-width="8" fill="none"/><path d="M-40-4q40-26 80 0" stroke="#8a5c2f" stroke-width="2" fill="none"/>${[-30,-15,0,15,30].map(x=>`<line x1="${x}" y1="${-4-Math.round(17*(1-(x/46)**2))}" x2="${x}" y2="${-20-Math.round(17*(1-(x/46)**2))}" stroke="#8a5c2f" stroke-width="2.5"/>`).join('')}`,
+ bench_out:()=>`<rect x="-34" y="-30" width="68" height="6" rx="2" fill="#a9743e"/><rect x="-34" y="-20" width="68" height="7" rx="2" fill="#8a5c2f"/><rect x="-30" y="-13" width="5" height="13" fill="#555"/><rect x="25" y="-13" width="5" height="13" fill="#555"/>`,
+ gazebo:()=>`<path d="M-50-78l50-26 50 26z" fill="#c0573f"/><rect x="-46" y="-80" width="92" height="6" fill="#8a5c2f"/><rect x="-42" y="-74" width="5" height="74" fill="#f4e3c1"/><rect x="37" y="-74" width="5" height="74" fill="#f4e3c1"/><rect x="-3" y="-74" width="5" height="74" fill="#f4e3c1" opacity=".7"/><rect x="-44" y="-8" width="88" height="8" fill="#a9743e"/><path d="M-37-30h74" stroke="#f4e3c1" stroke-width="3"/>`,
+ swing:()=>`<path d="M-30 0l8-70h44l8 70" stroke="#8a5c2f" stroke-width="4" fill="none"/><path d="M-12-70v48M12-70v48" stroke="#555" stroke-width="1.5"/><rect x="-16" y="-24" width="32" height="5" rx="2" fill="#ef4e3a"/>`,
+ birdhouse:()=>`<rect x="-2" y="-40" width="4" height="40" fill="#8a5c2f"/><rect x="-11" y="-60" width="22" height="20" fill="#e0a05e"/><path d="M-14-58l14-12 14 12z" fill="#c0573f"/><circle cx="0" cy="-50" r="3.5" fill="#4a2f15"/>`,
+ doghouse:()=>`<rect x="-24" y="-30" width="48" height="30" fill="#c98f55"/><path d="M-30-28l30-20 30 20z" fill="#c0573f"/><path d="M-9 0v-14a9 9 0 0 1 18 0v14z" fill="#4a2f15"/><ellipse cx="34" cy="-8" rx="12" ry="7" fill="#e0a05e"/><circle cx="44" cy="-16" r="6" fill="#e0a05e"/><ellipse cx="40" cy="-19" rx="3" ry="5" fill="#8a5c2f"/><circle cx="47" cy="-16" r="1.2" fill="#333"/>`,
+ mailbox:()=>`<rect x="-2" y="-34" width="4" height="34" fill="#555"/><rect x="-12" y="-46" width="22" height="14" rx="6" fill="#2f7ff0"/><rect x="10" y="-46" width="3" height="10" fill="#ef4e3a"/>`,
+ path:()=>[[-30,-4],[-10,-8],[10,-4],[28,-9],[-20,-14],[2,-15],[22,-16]].map(([x,y])=>`<ellipse cx="${x}" cy="${y}" rx="9" ry="4" fill="#cfc6b3" stroke="#b0a68f"/>`).join(''),
+ lantern:()=>`<rect x="-2" y="-70" width="4" height="70" fill="#333"/><rect x="-8" y="-84" width="16" height="16" rx="3" fill="#ffd977" stroke="#333" stroke-width="2"/><ellipse cx="0" cy="-76" rx="20" ry="10" fill="#fff3b0" opacity=".35"/>`,
+ vegbed:c=>`<rect x="-40" y="-14" width="80" height="14" rx="4" fill="#7a5230"/>${[-30,-15,0,15,30].map(x=>`<path d="M${x}-14c-4-8 0-12 0-14 2 4 6 6 0 14z" fill="#3fa34d"/><circle cx="${x}" cy="-12" r="${c?4:0}" fill="${c||'none'}"/>`).join('')}`,
+ scarecrow:()=>`<rect x="-2" y="-70" width="4" height="70" fill="#8a5c2f"/><rect x="-26" y="-52" width="52" height="4" fill="#8a5c2f"/><path d="M-14-54h28l-4 30h-20z" fill="#ef4e3a"/><path d="M-12-44h24" stroke="#ffd23f" stroke-width="2"/><circle cx="0" cy="-62" r="9" fill="#f4e3c1"/><path d="M-14-66h28l-6-10h-16z" fill="#c9a24a"/>`,
+ greenhouse:()=>`<path d="M-56 0v-46l56-30 56 30v46z" fill="#d6f0ff" opacity=".85" stroke="#9aa3ac" stroke-width="2"/><path d="M-28 0v-60M0 0v-76M28 0v-60M-56-23h112" stroke="#9aa3ac" stroke-width="2"/><path d="M-48-4c4-14 8-16 8-24M-20-4c2-12 6-10 6-20M20-4c-2-12 4-14 4-22M44-4c-2-10 2-14 2-18" stroke="#3fa34d" stroke-width="4" fill="none"/><circle cx="-41" cy="-24" r="3" fill="#ef4e3a"/><circle cx="23" cy="-22" r="3" fill="#ef4e3a"/>`,
+ beehive:()=>`<rect x="-14" y="-12" width="28" height="12" fill="#ffc21a"/><rect x="-16" y="-24" width="32" height="12" fill="#ffd977"/><rect x="-14" y="-36" width="28" height="12" fill="#ffc21a"/><path d="M-18-36h36l-4-6h-28z" fill="#c0573f"/><rect x="-4" y="-6" width="8" height="3" fill="#4a2f15"/>${[[22,-30],[28,-20],[-24,-26]].map(([x,y])=>`<ellipse cx="${x}" cy="${y}" rx="3" ry="2" fill="#ffd23f" stroke="#333" stroke-width="1"/>`).join('')}`,
+ well:()=>`<path d="M-24 0v-22h48v22z" fill="#9aa3ac"/><path d="M-24-12h48M-12-22v10M8-12v12" stroke="#7d868f" stroke-width="2"/><rect x="-22" y="-60" width="4" height="38" fill="#8a5c2f"/><rect x="18" y="-60" width="4" height="38" fill="#8a5c2f"/><path d="M-30-56l30-16 30 16z" fill="#c0573f"/><line x1="0" y1="-50" x2="0" y2="-34" stroke="#555"/><rect x="-5" y="-34" width="10" height="8" fill="#a9743e"/>`,
+ fountain:()=>`<ellipse cx="0" cy="-6" rx="30" ry="8" fill="#9aa3ac"/><ellipse cx="0" cy="-8" rx="24" ry="5" fill="#6dbaf0"/><rect x="-4" y="-34" width="8" height="26" fill="#9aa3ac"/><ellipse cx="0" cy="-34" rx="12" ry="4" fill="#9aa3ac"/><path d="M0-36c-4-10-12-10-16 0M0-36c4-10 12-10 16 0M0-36v-10" stroke="#6dbaf0" stroke-width="2.5" fill="none"/>`,
+ pumpkin:()=>`<ellipse cx="-10" cy="-8" rx="10" ry="8" fill="#ff8a1f"/><ellipse cx="8" cy="-10" rx="12" ry="10" fill="#ff8a1f"/><path d="M8-20c0-4 2-6 4-6" stroke="#3fa34d" stroke-width="2.5" fill="none"/><path d="M2-10q6-6 12 0M-14-8q4-4 8 0" stroke="#e07020" stroke-width="1.5" fill="none"/>`,
+ hammock:()=>`<rect x="-46" y="-56" width="5" height="56" fill="#8a5c2f"/><rect x="41" y="-56" width="5" height="56" fill="#8a5c2f"/><path d="M-41-46q41 34 82 0" stroke="#ef4e3a" stroke-width="8" fill="none"/><path d="M-41-46q41 26 82 0" stroke="#ffd23f" stroke-width="2" fill="none"/>`,
+ grill:()=>`<path d="M-16-30a16 12 0 0 0 32 0z" fill="#2d333d"/><path d="M-10-18l-6 18M10-18l6 18M0-18v18" stroke="#2d333d" stroke-width="2.5"/><path d="M-6-36c-2-6 2-6 0-12M4-36c-2-6 2-6 0-12" stroke="#9aa3ac" stroke-width="2" fill="none" opacity=".7"/>`,
+ garage:c=>`<rect x="-60" y="-70" width="120" height="70" fill="#e8d5b5"/><path d="M-66-68l66-26 66 26z" fill="#8a5c2f"/><rect x="-44" y="-50" width="88" height="50" fill="${c||'#9aa3ac'}"/>${[-40,-30,-20,-10].map(y=>`<line x1="-44" y1="${y}" x2="44" y2="${y}" stroke="rgba(0,0,0,.2)" stroke-width="2"/>`).join('')}`,
+ car:c=>`<path d="M-40-12v-12l10-4 8-12h36l12 12 12 4v12z" fill="${c||'#ef4e3a'}"/><path d="M-18-28l6-10h12v10zM4-28v-10h10l8 10z" fill="#bfe4ff"/><circle cx="-22" cy="-10" r="8" fill="#2d333d"/><circle cx="22" cy="-10" r="8" fill="#2d333d"/><circle cx="-22" cy="-10" r="3" fill="#9aa3ac"/><circle cx="22" cy="-10" r="3" fill="#9aa3ac"/><rect x="-42" y="-20" width="5" height="4" fill="#ffd977"/>`,
+ bicycle:()=>`<circle cx="-16" cy="-12" r="11" fill="none" stroke="#2d333d" stroke-width="2.5"/><circle cx="16" cy="-12" r="11" fill="none" stroke="#2d333d" stroke-width="2.5"/><path d="M-16-12l10-16h16l6 16M-6-28l6 16 10-16M-8-32h6M10-28l2-6h6" stroke="#2f7ff0" stroke-width="3" fill="none"/>`,
+ sandbox:()=>`<rect x="-36" y="-14" width="72" height="14" fill="#a9743e"/><path d="M-32-12q16-10 32-2t32-2v10h-64z" fill="#f2d48a"/><path d="M14-14l4-12 6 2z" fill="#ef4e3a"/><path d="M-14-16c0-6 8-6 8 0z" fill="#2f7ff0"/>`,
+ slide:()=>`<path d="M-28 0v-56M-14 0v-56" stroke="#2f7ff0" stroke-width="4"/>${[-12,-24,-36,-48].map(y=>`<line x1="-28" y1="${y}" x2="-14" y2="${y}" stroke="#2f7ff0" stroke-width="3"/>`).join('')}<rect x="-30" y="-60" width="18" height="6" fill="#ef4e3a"/><path d="M-14-58c20 0 24 48 46 58" stroke="#ffc21a" stroke-width="7" fill="none"/>`,
+ trampoline:()=>`<ellipse cx="0" cy="-16" rx="34" ry="8" fill="#2d333d"/><ellipse cx="0" cy="-16" rx="34" ry="8" fill="none" stroke="#2f7ff0" stroke-width="4"/><path d="M-28-14l-4 14M28-14l4 14M0-8v8" stroke="#555" stroke-width="3"/>`,
+ playhouse:()=>`<rect x="-20" y="-34" width="40" height="34" fill="#ffd977"/><path d="M-26-32l26-22 26 22z" fill="#ef4e3a"/><rect x="-6" y="-18" width="12" height="18" fill="#2f7ff0"/><rect x="8" y="-28" width="9" height="9" fill="#bfe4ff"/>`,
+ seesaw:()=>`<path d="M-6 0l6-12 6 12z" fill="#555"/><rect x="-40" y="-16" width="80" height="5" rx="2" fill="#ffc21a" transform="rotate(-10 0 -13)"/><rect x="-38" y="-14" width="4" height="10" fill="#ef4e3a" transform="rotate(-10 0 -13)"/><rect x="34" y="-28" width="4" height="10" fill="#ef4e3a" transform="rotate(-10 0 -13)"/>`,
+ kite:()=>`<path d="M0-30l14 16-14 16-14-16z" fill="#ef4e3a"/><path d="M0-30v32M-14-14h28" stroke="#fff" stroke-width="1.5"/><path d="M0 2q-6 10 0 18t0 18" stroke="#555" stroke-width="1" fill="none"/><path d="M-2 10l4 2-4 2zM-2 22l4 2-4 2z" fill="#ffd23f"/>`,
+ hoop:()=>`<rect x="-2" y="-90" width="4" height="90" fill="#555"/><rect x="-14" y="-104" width="28" height="18" fill="#fff" stroke="#999"/><ellipse cx="0" cy="-86" rx="10" ry="3" fill="none" stroke="#ef4e3a" stroke-width="2.5"/><path d="M-9-86l3 12h6l3-12" stroke="#fff" stroke-width="1" fill="none"/><circle cx="16" cy="-6" r="6" fill="#ff8a1f"/>`,
+ woodpile:()=>[[-18,-6],[0,-6],[18,-6],[-9,-17],[9,-17],[0,-28]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="9" fill="#a9743e"/><circle cx="${x}" cy="${y}" r="5" fill="#e0b07a"/>`).join(''),
+ wheelbarrow:()=>`<path d="M-26-26h40l-6 16h-28z" fill="#2f9e8f"/><circle cx="14" cy="-7" r="7" fill="#2d333d"/><path d="M-26-26l-14-6M-20-10l-4 10" stroke="#555" stroke-width="3"/><circle cx="-10" cy="-28" r="5" fill="#ef4e3a"/><circle cx="0" cy="-29" r="5" fill="#ff8a1f"/>`,
+ gnome:()=>`<path d="M-9 0l2-18h14l2 18z" fill="#2f7ff0"/><circle cx="0" cy="-22" r="6" fill="#f4e3c1"/><path d="M-6-20q6 12 12 0" fill="#fff"/><path d="M-8-25l8-20 8 20z" fill="#ef4e3a"/>`,
+ rocks:()=>`<ellipse cx="-12" cy="-6" rx="14" ry="8" fill="#9aa3ac"/><ellipse cx="10" cy="-5" rx="11" ry="6" fill="#b3bbc3"/><ellipse cx="0" cy="-12" rx="9" ry="6" fill="#c5ccd3"/>`,
+ arch:()=>`<path d="M-30 0v-50a30 30 0 0 1 60 0v50" stroke="#f4e3c1" stroke-width="6" fill="none"/>${[[-30,-30],[-28,-52],[-16,-74],[0,-80],[16,-74],[28,-52],[30,-30],[-30,-12],[30,-14]].map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="6" fill="#3fa34d"/><circle cx="${x+2}" cy="${y-2}" r="3.5" fill="${i%2?'#e2408c':'#ef4e3a'}"/>`).join('')}`,
+ deckchair:c=>`<path d="M-24-42h9l12 26h27v7h-32z" fill="${c||'#2f7ff0'}"/><path d="M-20-40l11 24h28" stroke="#fff" stroke-width="2" fill="none" opacity=".6"/><path d="M-18-9l-6 9M20-9v9M-4-16l-4 16" stroke="#8a5c2f" stroke-width="3"/>`,
+ umbrellatable:()=>`<rect x="-1.5" y="-62" width="3" height="62" fill="#555"/><path d="M-36-56q36-24 72 0z" fill="#ef4e3a"/><path d="M-12-62q12-14 24 0" fill="#fff" opacity=".5"/><rect x="-24" y="-24" width="48" height="5" rx="2" fill="#f4f7fa"/><path d="M-18-19l-4 19M18-19l4 19" stroke="#9aa3ac" stroke-width="2.5"/>`,
+ fencerow:c=>{let s='';for(let x=-150;x<=150;x+=14)s+=`<path d="M${x} 0v-30l5-6 5 6v30z" fill="${c||'#fff'}" stroke="#9aa3ac"/>`;return s+`<rect x="-152" y="-22" width="314" height="4" fill="${c||'#fff'}"/><rect x="-152" y="-10" width="314" height="4" fill="${c||'#fff'}"/>`},
+ windmill:()=>`<path d="M-8 0l3-40h10l3 40z" fill="#f4e3c1"/><g transform="translate(0 -40)"><path d="M0 0l-4-26h8zM0 0l26-4v8zM0 0l4 26h-8zM0 0l-26 4v-8z" fill="#c0573f"/><circle r="3" fill="#555"/></g>`,
+};
+function itemSVG(name,x,y,s,c){const f=IT[name];if(!f)return '';return `<g transform="translate(${x} ${y}) scale(${s||1})">${f(c)}</g>`}
+
+/* ---------- Фоны новых комнат и предметы ---------- */
+const FLAT={rug:1,path:1,pond:1};
+function roomItems(room){
+  const D=PROG.home.done,list=[];
+  room.tasks.forEach(t=>{if(D[t.id]&&t.items)t.items.forEach(it=>list.push([it[0],it[1],it[2],it[3],it[4]==='choice'?pick(t):it[4]]))});
+  list.sort((a,b)=>(FLAT[a[0]]?0:1)-(FLAT[b[0]]?0:1)||a[2]-b[2]);
+  return list.map(i=>itemSVG(i[0],i[1],i[2],i[3],i[4]||undefined)).join('');
+}
+function roomBG(room){
+  const D=PROG.home.done,wt=room.tasks.find(t=>t.wall),wok=wt&&D[wt.id],wc=wok?pick(wt):null;
+  const gt=room.tasks.find(t=>t.grass),gok=gt&&D[gt.id];
+  const cracks='<path d="M150 40l10 6M200 30l-8 9M240 60l12 4M60 70l8 8" stroke="#a9a090" stroke-width="2"/><circle cx="270" cy="20" r="10" fill="none" stroke="#bbb" stroke-width="1" opacity=".6"/><path d="M262 12l16 16M278 12l-16 16" stroke="#bbb" stroke-width=".8" opacity=".6"/>';
+  const wood='<rect x="0" y="150" width="320" height="50" fill="#caa06a"/><rect x="0" y="150" width="320" height="5" fill="#b1884f"/>'+[40,90,140,190,240,290].map(x=>`<line x1="${x}" y1="155" x2="${x-10}" y2="200" stroke="#b9925c" stroke-width="1.5"/>`).join('');
+  let s='';
+  if(room.bg==='in'){
+    s+=`<rect width="320" height="150" fill="${wc||'#e2ddd2'}"/>`+(wok?'':cracks);
+    if(room.win){const[x,y,w,h]=room.win;s+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="#bfe4ff" stroke="#fff" stroke-width="5"/><line x1="${x+w/2}" y1="${y}" x2="${x+w/2}" y2="${y+h}" stroke="#fff" stroke-width="4"/><line x1="${x}" y1="${y+h/2}" x2="${x+w}" y2="${y+h/2}" stroke="#fff" stroke-width="4"/>`}
+    if(room.door){const[x,w]=room.door;s+=`<rect x="${x}" y="40" width="${w}" height="110" rx="3" fill="#8a5c2f"/><rect x="${x+6}" y="48" width="${w-12}" height="40" rx="2" fill="#a9743e"/><rect x="${x+6}" y="96" width="${w-12}" height="46" rx="2" fill="#a9743e"/><circle cx="${x+w-8}" cy="98" r="3" fill="#ffd23f"/>`}
+    s+=wood;
+  }else if(room.bg==='glass'){
+    const fc=wc||'#a9b3bc';
+    s+='<rect width="320" height="150" fill="#d6f0ff"/><path d="M0 120q60-30 120-10t200-6v46h-320z" fill="#bfe3b0"/>';
+    for(let x=0;x<=320;x+=40)s+=`<rect x="${x-2}" y="0" width="4" height="150" fill="${fc}"/>`;
+    s+=`<rect x="0" y="70" width="320" height="4" fill="${fc}"/><rect x="0" y="0" width="320" height="6" fill="${fc}"/>`+(wok?'':'<rect width="320" height="150" fill="#9a8f7a" opacity=".35"/>');
+    s+='<rect x="0" y="150" width="320" height="50" fill="#d9cdb8"/>';for(let x=0;x<320;x+=32)s+=`<rect x="${x}" y="150" width="16" height="25" fill="#cbbfa8"/><rect x="${x+16}" y="175" width="16" height="25" fill="#cbbfa8"/>`;
+  }else if(room.bg==='attic'){
+    s+=`<rect width="320" height="150" fill="${wc||'#a68a6a'}"/>`;for(let y=12;y<150;y+=14)s+=`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="rgba(0,0,0,.12)" stroke-width="1.5"/>`;
+    s+='<path d="M0 0h70L0 70z" fill="#6b4421"/><path d="M320 0h-70l70 70z" fill="#6b4421"/><path d="M0 70L70 0M320 70L250 0" stroke="#4a2f15" stroke-width="5"/><circle cx="170" cy="56" r="22" fill="#bfe4ff" stroke="#8a5c2f" stroke-width="5"/><path d="M170 34v44M148 56h44" stroke="#8a5c2f" stroke-width="3"/>';
+    if(!wok)s+='<path d="M90 20l20 12M220 100l18-6M40 110l14 4" stroke="#7a6a50" stroke-width="1"/><circle cx="110" cy="120" r="14" fill="#9a8f7a" opacity=".45"/><circle cx="240" cy="40" r="10" fill="#9a8f7a" opacity=".45"/>';
+    s+=wood;
+  }else if(room.bg==='cellar'){
+    s+=`<rect width="320" height="150" fill="${wc||'#cfc8b8'}"/>`;
+    for(let y=0,r=0;y<150;y+=22,r++)for(let x=(r%2)*22-22;x<320;x+=44)s+=`<rect x="${x+2}" y="${y+2}" width="40" height="18" rx="5" fill="rgba(0,0,0,${wok?.05:.12})"/>`;
+    s+='<rect x="0" y="150" width="320" height="50" fill="#9a958c"/>';for(let x=0;x<320;x+=40)s+=`<line x1="${x}" y1="150" x2="${x}" y2="200" stroke="#857f75"/>`;
+  }else if(room.bg==='veranda'){
+    s+='<rect width="320" height="150" fill="#bfe4ff"/>';
+    s+=`<rect x="0" y="0" width="320" height="104" fill="${wc||'#d9d2c3'}"/>`;for(let y=8;y<104;y+=12)s+=`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="rgba(0,0,0,.08)" stroke-width="2"/>`;
+    s+='<rect x="120" y="22" width="80" height="62" rx="4" fill="#bfe4ff" stroke="#fff" stroke-width="5"/><line x1="160" y1="22" x2="160" y2="84" stroke="#fff" stroke-width="4"/>';
+    s+='<rect x="0" y="104" width="320" height="46" fill="#bfe4ff"/><path d="M0 132q80-20 160-6t160-4v28h-320z" fill="#8fd16a"/>';
+    for(let x=4;x<320;x+=16)s+=`<rect x="${x}" y="112" width="5" height="38" fill="#f4efe6"/>`;s+='<rect x="0" y="108" width="320" height="6" fill="#f4efe6"/>';
+    s+='<rect x="0" y="150" width="320" height="50" fill="#b98c5e"/>';for(let y=156;y<200;y+=9)s+=`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="#a37850" stroke-width="2"/>`;
+    if(!wok)s+='<rect width="320" height="104" fill="#9a8f7a" opacity=".25"/>';
+  }else{
+    s+='<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fd3ff"/><stop offset="1" stop-color="#d6f0ff"/></linearGradient></defs><rect width="320" height="130" fill="url(#sky)"/><circle cx="286" cy="28" r="15" fill="#ffd23f"/><ellipse cx="70" cy="30" rx="26" ry="9" fill="#fff" opacity=".9"/><ellipse cx="90" cy="26" rx="18" ry="8" fill="#fff" opacity=".9"/><ellipse cx="200" cy="44" rx="20" ry="7" fill="#fff" opacity=".8"/>';
+    s+='<path d="M0 118q60-26 140-10t180-8v30h-320z" fill="#9fcf8a"/>';
+    s+=`<rect x="0" y="122" width="320" height="78" fill="${gok?'#6cc46c':'#a9a564'}"/>`;
+    if(!gok){for(let x=6;x<320;x+=13)s+=`<path d="M${x} ${140+(x*7)%50}l3-10 3 10" stroke="#7d7a3e" stroke-width="2" fill="none"/>`;s+='<ellipse cx="80" cy="170" rx="18" ry="6" fill="#8a7a50"/><ellipse cx="240" cy="160" rx="14" ry="5" fill="#8a7a50"/>'}
+    else for(let x=10;x<320;x+=24)s+=`<path d="M${x} ${150+(x*11)%44}l2-5 2 5" stroke="#4fa64f" stroke-width="1.5" fill="none"/>`;
+  }
+  return s;
+}
+
+const GAR_I=HOME.findIndex(r=>r.id==='gar');
 function roomDone(r){return r.tasks.every(t=>PROG.home.done[t.id])}
-function roomOpen(i){return i===0||roomDone(HOME[i-1])}
+function roomOpen(i){return i===0||roomDone(HOME[i-1])||HOME[i].tasks.some(t=>PROG.home.done[t.id])}
 function canBuyHome(){return HOME.some((r,i)=>roomOpen(i)&&r.tasks.some(t=>!PROG.home.done[t.id]&&t.cost<=PROG.tokens))}
 function homeStats(){let d=0,t=0;HOME.forEach(r=>r.tasks.forEach(x=>{t++;if(PROG.home.done[x.id])d++}));return{done:d,total:t}}
 function pick(t){return t.choices[PROG.home.choice[t.id]||0][1]}
@@ -1118,6 +1289,7 @@ function roomSVG(room){
   const D=PROG.home.done,T=id=>room.tasks.find(t=>t.id===id);
   const floor='<rect x="0" y="150" width="320" height="50" fill="#caa06a"/><rect x="0" y="150" width="320" height="5" fill="#b1884f"/>';
   let s='<svg viewBox="0 0 320 200" role="img" aria-label="'+room.name+'">';
+  if(room.bg){return s+roomBG(room)+roomItems(room)+'</svg>'}
   if(room.id==='liv'){
     s+=`<rect width="320" height="150" fill="${D.liv1?pick(T('liv1')):'#e2ddd2'}"/>`+floor;
     s+='<rect x="34" y="30" width="72" height="58" rx="4" fill="#bfe4ff" stroke="#fff" stroke-width="5"/><line x1="70" y1="30" x2="70" y2="88" stroke="#fff" stroke-width="4"/><line x1="34" y1="59" x2="106" y2="59" stroke="#fff" stroke-width="4"/>';
@@ -1166,14 +1338,14 @@ function roomSVG(room){
     if(D.gar3)[[30,170,'#e2408c'],[52,176,'#ffd23f'],[74,168,'#ef4e3a'],[96,177,'#8a4fd6'],[118,170,'#ff8a1f']].forEach(([x,y,c])=>{s+=`<line x1="${x}" y1="${y}" x2="${x}" y2="${y+16}" stroke="#2e8b3a" stroke-width="2"/><circle cx="${x}" cy="${y}" r="6" fill="${c}"/><circle cx="${x}" cy="${y}" r="2.2" fill="#fff6c8"/>`});
     if(D.gar4)s+='<rect x="196" y="160" width="70" height="8" rx="2" fill="#8a5c2f"/><rect x="196" y="148" width="70" height="7" rx="2" fill="#a9743e"/><rect x="202" y="168" width="5" height="16" fill="#6b4421"/><rect x="255" y="168" width="5" height="16" fill="#6b4421"/><rect x="290" y="112" width="5" height="70" fill="#333"/><rect x="284" y="98" width="17" height="16" rx="3" fill="#ffd977" stroke="#333" stroke-width="2"/>';
   }
-  return s+'</svg>';
+  return s+roomItems(room)+'</svg>';
 }
 function houseScreen(ri){
   if(ri==null){ri=HOME.findIndex(r=>!roomDone(r));if(ri<0)ri=HOME.length-1}
   const room=HOME[ri],open=roomOpen(ri),hp=homeStats();
   const done=room.tasks.filter(t=>PROG.home.done[t.id]).length;
   const tabs=HOME.map((r,i)=>`<button class="rtab${i===ri?' cur':''}${roomDone(r)?' done':''}${roomOpen(i)?'':' lockd'}" data-ri="${i}" type="button">${roomOpen(i)?'':'🔒 '}${r.name}</button>`).join('');
-  const tasks=open?room.tasks.map(t=>{
+  const tasks=open?room.tasks.slice().sort((x,y)=>(PROG.home.done[x.id]?1:0)-(PROG.home.done[y.id]?1:0)).map(t=>{
     const isDone=!!PROG.home.done[t.id],can=PROG.tokens>=t.cost;
     const ch=t.choices?`<div class="choice">${t.choices.map((o,oi)=>`<button data-tid="${t.id}" data-oi="${oi}" class="${(PROG.home.choice[t.id]||0)===oi?'sel':''}" type="button"><i style="background:${o[1]}"></i>${o[0]}</button>`).join('')}</div>`:'';
     return `<div class="task${isDone?' done':''}"><div style="flex:1;min-width:0"><div class="tn">${t.name}</div>${ch}</div>${isDone?'<span class="check" aria-label="Готово">✓</span>':`<span class="tc"><i class="tok"></i>${t.cost}</span><button class="tdo" data-do="${t.id}" type="button" ${can?'':'disabled'}>${can?'Сделать':'Мало жетонов'}</button>`}</div>`;
@@ -1181,7 +1353,9 @@ function houseScreen(ri){
   openOv(`<div class="house">
      <div class="hhead"><h2>🏠 Мой дом</h2><span class="toks"><i class="tok"></i>${PROG.tokens}</span></div>
      <div class="roomtabs">${tabs}</div>
-     <p class="hnote">${open?room.story:''} Готово всего: ${hp.done} из ${hp.total}.</p>
+     <p class="hnote">${open?room.story:''}</p>
+     <div class="hsum"><span>🏠 Дом: <b>${HOME.slice(0,GAR_I).filter(roomDone).length}/${GAR_I}</b> комнат</span><span>🌳 Участок: <b>${HOME.slice(GAR_I).filter(roomDone).length}/${HOME.length-GAR_I}</b></span><span>Задач: <b>${hp.done}/${hp.total}</b></span></div>
+     <div class="rhead"><b>${room.name}</b><span>${done} из ${room.tasks.length}</span></div>
      <div class="roomview">${roomSVG(room)}</div>
      <div class="rprog" aria-label="Прогресс комнаты"><i style="width:${Math.round(100*done/room.tasks.length)}%"></i></div>
      <div class="tasks">${tasks}</div>
@@ -1192,13 +1366,15 @@ function houseScreen(ri){
   $('#oHome').onclick=()=>{closeOv();homeMenu()};
   $('#oPlayH').onclick=()=>{closeOv();if(dailyMode)loadLevel(PROG.level||1,true)};
   $('#ovHost').querySelectorAll('.rtab').forEach(b=>b.onclick=()=>houseScreen(+b.dataset.ri));
+  {const c=$('#ovHost').querySelector('.rtab.cur');if(c){const st=c.parentElement;st.scrollLeft=c.offsetLeft-st.clientWidth/2+c.offsetWidth/2}}
   $('#ovHost').querySelectorAll('[data-oi]').forEach(b=>b.onclick=()=>{PROG.home.choice[b.dataset.tid]=+b.dataset.oi;saveProg();houseScreen(ri)});
   $('#ovHost').querySelectorAll('[data-do]').forEach(b=>b.onclick=()=>{
     const t=room.tasks.find(x=>x.id===b.dataset.do);
     if(PROG.tokens<t.cost){toast('Не хватает жетонов. Проходите уровни, чтобы их заработать.');return}
     PROG.tokens-=t.cost;PROG.home.done[t.id]=true;
     let msg=`Готово: «${t.name}».`;const hq=questEv('house');if(hq.length)msg+=` Задание выполнено: «${hq[0]}».`;sfx('coin');
-    if(roomDone(room)&&!PROG.home.rewarded[room.id]){PROG.home.rewarded[room.id]=true;PROG.coins+=100;msg=`Комната «${room.name}» готова! +100 монет.`+(ri<HOME.length-1?` Открыта: «${HOME[ri+1].name}».`:' Весь дом обустроен! Спасибо, бабушка была бы счастлива.')}
+    if(roomDone(room)&&!PROG.home.rewarded[room.id]){PROG.home.rewarded[room.id]=true;const rc=100+ri*20;PROG.coins+=rc;msg=`«${room.name}» — готово! +${rc} монет.`+(ri<HOME.length-1?` Открыто: «${HOME[ri+1].name}».`:'')}
+    if(HOME.every(roomDone)&&!PROG.home.rewarded.all){PROG.home.rewarded.all=true;PROG.coins+=2000;msg='🎉 Новоселье! Весь дом и участок обустроены. +2000 монет. Бабушка была бы счастлива.'}
     saveProg();houseScreen(ri);toast(msg);
     confetti(innerWidth/2,innerHeight*.35,roomDone(room)?150:40);
   });
@@ -1341,14 +1517,15 @@ function nextChest(){return Math.ceil(Math.max(1,PROG.top||PROG.level||1)/10)*10
 function newsScreen(grant,after){
   openOv(`<div class="band"><div class="eyebrow">Обновление</div><h2>Что нового</h2></div>
    <div class="sbody"><ul>
-     <li><b>🏠 Мой дом.</b> Обустраивайте дом бабушки комнату за комнатой: 7 комнат, 28 задач, выбор оформления.</li>
+     <li><b>❄ Лёд</b> (с 15 уровня) — ледяную карту не сдвинуть, пока не соберёте категорию. <b>⛓ Цепи</b> (с 35) — слово свободно, когда его категория в ячейке.</li>
+     <li><b>🏠 Мой дом</b> вырос: 14 комнат и 9 зон участка — веранда, огород, пруд, беседка, гараж, площадка, пасека, теплица. Каждую комнату можно обустроить полностью — 276 задач, хватит на 1000+ уровней.</li>
      <li><b><i class="tok"></i> Жетоны</b> — новая валюта для дома. Монеты остаются для подсказок и помощников.</li>
      <li><b>📋 Задания дня</b>, <b>📅 уровень дня</b> и <b>🎁 ежедневный подарок</b> с серией до 7 дней.</li>
      <li><b>🧰 Сундук</b> каждые 10 уровней, <b>🔥 серия побед</b> и <b>📚 альбом</b> из ${CATS.length} тем.</li>
      <li>Уровни стали сложнее и дальше растут в сложности. Ключи теперь спрятаны в стопках.</li>
    </ul>
    ${grant?`<div class="stats2"><div class="stat blue" style="grid-column:1/-1"><span class="k">Подарок за пройденные уровни</span><span class="v"><i class="tok"></i>+${grant}</span></div></div>`:''}
-   <div class="acts2"><button class="sbtn go" id="oClose" type="button">${grant?'Забрать и обустраивать дом':'Отлично'}</button></div></div>`);
+   <div class="acts2"><button class="sbtn go" id="oClose" type="button">${grant?'Забрать и обустраивать дом':'Отлично, играть'}</button></div></div>`);
   $('#oClose').onclick=()=>{closeOv();sfx('coin');after()};
 }
 
