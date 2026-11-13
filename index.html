@@ -1,4 +1,9 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+.card.gold{box-shadow:0 0 0 3px #f5c542,0 0 14px 3px rgba(255,200,40,.75),0 3px 0 rgba(0,0,0,.18)!important;animation:goldglow 1.6s ease-in-out infinite alternate}
+.card.gold::after{content:'🪙';position:absolute;right:3px;bottom:2px;font-size:13px;line-height:1}
+@keyframes goldglow{from{box-shadow:0 0 0 3px #f5c542,0 0 8px 2px rgba(255,200,40,.5)}to{box-shadow:0 0 0 3px #ffe08a,0 0 18px 5px rgba(255,200,40,.9)}}
+@media (prefers-reduced-motion:reduce){.card.gold{animation:none}}
+</style></head><body>
 <title>Пасьянс Картотека</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="manifest" href="manifest.webmanifest">
@@ -575,7 +580,17 @@ function genRaw(L,a,soft){soft=soft||0;
     for(let i=0;i<deck.length;i++)if(isKey(deck[i])&&slots.length){const o=slots.pop();const t=o.id;o.id=deck[i];deck[i]=t}
     cols.forEach((col,ci)=>{if(locks[ci]||!col.length)return;const top=col[col.length-1];if(isKey(top.id)&&slots.length){const o=slots.pop();const t=o.id;o.id=top.id;top.id=t}});
   }
-  let nIce=L<15?0:Math.min(4,1+Math.floor((L-15)/20)),nChain=L<35?0:Math.min(3,1+Math.floor((L-35)/30));
+  // бонусные карты: монетки, песочные часы (+3 хода), лампочки (бесплатная подсказка); золотые слова
+  {const r2=rng32(L*104729+a*31+7);const treas=L>=5&&L%7===0;
+   const bon=[];if(L>=3)bon.push('coin');if(L>=20)bon.push('coin');if(treas)bon.push('coin','coin','coin');
+   if(L>=6)bon.push('time');if(L>=30)bon.push('time');if(L>=50)bon.push('time');if(L>=10)bon.push('bulb');if(L>=60)bon.push('bulb');
+   const hid=[];cols.forEach((col,ci)=>{if(locks[ci])return;for(let j=0;j<col.length-1;j++)hid.push([ci,j])});shuffle(hid,r2);
+   bon.forEach((b,k)=>{const bid=id++;cards[bid]={id:bid,t:'b',c:-1,b,text:''};
+     if(k%2===0&&hid.length){const [ci,j]=hid.pop();cols[ci].splice(j,0,{id:bid,up:false})}
+     else deck.splice(Math.floor(r2()*(deck.length+1)),0,bid)});
+   const ws=Object.values(cards).filter(c=>c.t==='w');shuffle(ws,r2);const ng=L<3?0:treas?3:L>=25?2:1;ws.slice(0,ng).forEach(c=>c.gold=true);
+   var TREAS=treas}
+  let nIce=L<15?0:Math.min(3,1+Math.floor((L-15)/20)),nChain=L<35?0:Math.min(2,1+Math.floor((L-35)/30));
   if(soft===1){nIce=Math.ceil(nIce/2);nChain=Math.floor(nChain/2)}else if(soft>=2){nIce=0;nChain=0}
   if(nIce||nChain){
     const ent=[];cols.forEach(col=>col.forEach(o=>{if(cards[o.id].t==='w')ent.push(o)}));shuffle(ent,r);
@@ -594,7 +609,7 @@ function genRaw(L,a,soft){soft=soft||0;
       const bad=Object.values(cards).some(c=>{if(!c.chain)return false;const pc=pos[catCard[c.c]];return pc&&chainedAt.some(([ci,j])=>ci===pc[0]&&j>pc[1])});
       if(bad){cards[o.id].chain=false;chainedAt.pop();ch--}}
   }
-  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(L>=60&&soft<3?NC-1:NC,K)).fill(null),soft,done:[],moves:0,hist:[],stockStart:deck.length,total:id};
+  return {L,cats,cards,cols,locks,stock:deck,waste:[],slots:new Array(Math.min(NC,K)).fill(null),soft,done:[],moves:0,hist:[],stockStart:deck.length,total:id,got:{},bq:[],freeHints:0,treasure:TREAS};
 }
 let S=null;
 function solvable(L,a,soft){
@@ -614,14 +629,24 @@ function solvable(L,a,soft){
   }
   return best;
 }
+function casualRun(g,seed){const prev=S;S=JSON.parse(JSON.stringify(g));const r=rng32(seed);let steps=0,idle=0,res=0;
+  while(steps<2500){S.slots.forEach((sl,i)=>{if(sl&&sl.complete)finishSlot(i)});if(isWon()){res=S.moves;break}
+    const ms=allMoves().filter(m=>m.score>=20);let m=null;
+    if(ms.length){if(r()<.55){const top=ms.filter(x=>x.score===ms[0].score);m=top[Math.floor(r()*top.length)]}else m=ms[Math.floor(r()*ms.length)];
+      if(m.score<45&&drawProductive()&&r()<.5)m=null}
+    if(m){applyMove(m.src,m.tg);idle=0}else{if(!applyDraw())break;if(++idle>S.stock.length+S.waste.length+3)break}steps++}
+  S=prev;return res}
 function genLevel(L){
   const prev=S;let a=0,best=0;
   let soft=0;
   outer:for(soft=0;soft<4;soft++)for(a=0;a<(soft?15:30);a++){best=solvable(L,a,soft);if(best)break outer}
   if(soft>3){soft=3;a=0}
   S=prev;const g=genRaw(L,a,soft);
-  const slack=L<=4?1.45:L<=12?1.25:L<25?1.12:L<40?1.08:L<60?1.05:1.03;
-  g.limit=Math.ceil((best||g.total*3)*slack)+2;g.solverBest=best;
+  // лимит считаем по «обычному» игроку: он не всегда делает лучший ход
+  let p75=0;if(best){const runs=[];for(let k=0;k<14;k++){const m=casualRun(g,L*977+k);if(m)runs.push(m)}runs.sort((x,y)=>x-y);
+    p75=runs.length>=4?runs[Math.floor(runs.length*.75)]:Math.round(best*1.35)}
+  const slack=L<=4?1.5:L<=12?1.4:1.3;
+  g.limit=Math.ceil(Math.max((best||g.total*3)*slack,p75*1.12))+4;g.solverBest=best;
   return g;
 }
 function snap(){return JSON.stringify({limit:S.limit,cols:S.cols,locks:S.locks,stock:S.stock,waste:S.waste,slots:S.slots,done:S.done,moves:S.moves})}
@@ -679,15 +704,22 @@ function applyMove(src,tg){
     else{sl.n+=ids.length;sl.last=S.cats[sl.cat].ord?ids.reduce((m,id)=>S.cards[id].ord>S.cards[m].ord?id:m,ids[0]):ids[ids.length-1];if(sl.n>=S.cats[sl.cat].total){sl.complete=true;completed=tg.i}}
   }else ids.forEach(id=>S.cols[tg.i].push({id,up:true}));
   if(completed>=0)meltIce();
-  S.moves++;
+  if(tg.k==='slot')ids.forEach(id=>{if(S.cards[id].gold&&!S.got[id]){S.got[id]=1;S.bq.push('gold')}});
+  S.moves++;collectBonus();
   return {ids,completed,revealed,unlocked};
+}
+function collectBonus(){let again=true;
+  const grant=(id)=>{const c=S.cards[id];if(S.got[id])return;S.got[id]=1;if(c.b==='time')S.limit+=3;else if(c.b==='bulb')S.freeHints++;S.bq.push(c.b)};
+  while(again){again=false;
+    S.cols.forEach(col=>{const t=col[col.length-1];if(t&&S.cards[t.id].t==='b'&&(t.up||col.length===1||true)&&t.up){col.pop();grant(t.id);if(col.length&&!col[col.length-1].up)col[col.length-1].up=true;again=true}});
+    if(S.waste.length&&S.cards[S.waste[S.waste.length-1]].t==='b'){grant(S.waste.pop());again=true}}
 }
 function finishSlot(i){const sl=S.slots[i];if(sl&&sl.complete){S.done.push(sl.cat);S.slots[i]=null}}
 function applyDraw(){
   if(S.stock.length)S.waste.push(S.stock.pop());
   else if(S.waste.length){S.stock=S.waste.reverse();S.waste=[]}
   else return false;
-  S.moves++;return true;
+  S.moves++;collectBonus();return true;
 }
 function cardHasTarget(id,fromCol){
   const src=fromCol==null?{k:'waste'}:{k:'col',i:fromCol,idx:-1};
@@ -749,6 +781,8 @@ function applyJoker(){
   if(c.t==='c')S.slots[p.slot]={cat:c.c,n:0,last:null};
   else{const sl=S.slots[p.slot];sl.n++;sl.last=p.id;if(sl.n>=S.cats[sl.cat].total){sl.complete=true;completed=p.slot}}
   if(completed>=0)meltIce();
+  if(c.gold&&!S.got[p.id]){S.got[p.id]=1;S.bq.push('gold')}
+  collectBonus();
   return {id:p.id,slot:p.slot,completed,revealed};
 }
 /*LOGIC-END*/
@@ -763,13 +797,15 @@ try{const p=JSON.parse(localStorage.getItem('kartoteka:prog')||'null');if(p&&p.l
 PROG.tokens=PROG.tokens||0;PROG.home=PROG.home||{};PROG.home.done=PROG.home.done||{};PROG.home.choice=PROG.home.choice||{};PROG.home.rewarded=PROG.home.rewarded||{};PROG.daily=PROG.daily||{};PROG.bonus=PROG.bonus||{};PROG.album=PROG.album||{};PROG.chest=PROG.chest||{};PROG.streak=PROG.streak||0;
 {const mb=Object.keys(PROG.best).reduce((m,k)=>Math.max(m,+k),0);PROG.top=Math.max(PROG.top||1,PROG.level||1,mb+1)}
 let NEWS_GRANT=-1;if(PROG.news!=='v9'){const had=Object.keys(PROG.best).length>0||(PROG.level||1)>1;NEWS_GRANT=had?(PROG.migr?0:Math.min(15,Object.keys(PROG.best).length)):-1;PROG.tokens+=Math.max(0,NEWS_GRANT);PROG.migr=1;PROG.news='v9';try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
+let NEWS12=false;if(PROG.news!=='v12'){const had=Object.keys(PROG.best).length>0||(PROG.level||1)>1;if(had&&!PROG.gift12){PROG.coins+=300;PROG.gift12=1;NEWS12=true}PROG.news='v12';try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
 function saveProg(){try{localStorage.setItem('kartoteka:prog',JSON.stringify(PROG))}catch(e){}}
-function saveGame(){try{localStorage.setItem('kartoteka:game10',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60)}))}catch(e){}}
+function saveGame(){try{localStorage.setItem('kartoteka:game12',JSON.stringify({L:S.L,nc:NC,s:snap(),h:S.hist.slice(-60),g:S.got,fh:S.freeHints}))}catch(e){}}
 function loadLevel(L,resume,daily){
-  S=genLevel(L);undoUsed=false;
+  S=genLevel(L);undoUsed=false;let resumed=false;
   if(daily){dailyMode=true}else{dailyMode=false;PROG.level=L;saveProg()}
-  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game10')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[]}}catch(e){}}
+  if(resume){try{const g=JSON.parse(localStorage.getItem('kartoteka:game12')||'null');if(g&&g.L===L&&(g.nc||4)===NC){Object.assign(S,JSON.parse(g.s));S.hist=g.h||[];S.got=g.g||{};S.freeHints=g.fh||0;resumed=true}}catch(e){}}
   fresh=new Set();flipId=null;hideToast();layout();render();if(!daily)saveGame();
+  if(!resumed&&S.treasure)setTimeout(()=>toast('💰 Сокровищница! В этом уровне спрятано много монеток.'),400);
 }
 function plural(n,a,b,c){const m10=n%10,m100=n%100;if(m10===1&&m100!==11)return a;if(m10>=2&&m10<=4&&(m100<12||m100>14))return b;return c}
 function tabColor(cat){return 'var(--t'+S.cats[cat].color+')'}
@@ -780,6 +816,7 @@ function cardHTML(id,up,top,src,extra){
   const anim=(fresh.has(id)?' pop':'')+(flipId===id?' flip':'');
   if(!up)return `<div class="card back${extra||''}" data-id="${id}" style="${st}"${ds}></div>`;
   if(c.t==='k')return `<div class="card key${anim}${extra||''}" data-id="${id}" style="${st}--kc:var(--lk${c.col})"${ds} aria-label="Ключ"><span class="ktab">${KEY_SVG}</span>${KEY_SVG}</div>`;
+  if(c.gold&&!(extra||'').includes('gold'))extra=(extra||'')+' gold';
   if(c.t==='w'&&S.cats[c.c].pic)return `<div class="card word pic${anim}${extra||''}" data-id="${id}" style="${st}"${ds} aria-label="${c.text}"><span class="ptop">${c.text}</span><span class="pbig">${c.text}</span></div>`;
   if(c.t==='w')return `<div class="card word${anim}${extra||''}" data-id="${id}" style="${st}"${ds}><span class="wtxt${wordCls(c.text)}">${c.text}</span></div>`;
   const tot=S.cats[c.c].total;
@@ -818,7 +855,15 @@ function obst(o,html){
   if(S.cards[o.id].chain&&chained(o))ov+='<span class="chain-ov" aria-label="Цепи"><b>⛓</b></span>';
   return ov?html.replace(/<\/div>$/,ov+'</div>'):html;
 }
+const BONUS_MSG={coin:'🪙 Монетка! +10 монет',gold:'✨ Золотое слово! +15 монет',time:'⏳ Песочные часы! +3 хода',bulb:'💡 Лампочка! Следующая подсказка бесплатно'};
+function takeBonuses(){if(!S.bq||!S.bq.length)return;const msgs=[];let add=0;
+  S.bq.forEach(b=>{if(b==='coin')add+=10;if(b==='gold')add+=15;msgs.push(BONUS_MSG[b])});S.bq=[];
+  if(add){PROG.coins+=add;saveProg();const el=$('#coins');if(el){el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump')}}
+  try{sfx('coin')}catch(e){}setTimeout(()=>toast(msgs.join(' · ')),60);
+}
 function render(){
+  takeBonuses();
+  {const tp=document.querySelector('#bHint .tp');if(tp)tp.innerHTML=S.freeHints>0?`💡 ${S.freeHints>1?S.freeHints+' ':''}даром`:'<i class="coin"></i>25'}
   $('#lvl').textContent=dailyMode?'дня':S.L;
   const left=Math.max(0,S.limit-S.moves);$('#movesLeft').textContent=left;$('.ribbon').classList.toggle('low',left<=5);
   $('#gsq').innerHTML=S.cats.map((_,k)=>`<i class="${k<S.done.length?'on':''}"></i>`).join('');
@@ -943,6 +988,7 @@ function undo(){
 }
 const PRICE={hint:25,shuffle:30,joker:60,moves:50};
 function pay(kind,what){
+  if(kind==='hint'&&S&&S.freeHints>0){S.freeHints--;saveGame();return true}
   const c=PRICE[kind];
   if(PROG.coins<c){toast(`Не хватает монет: ${what} стоит ${c}, у вас ${PROG.coins}. Монеты дают за пройденные уровни.`);return false}
   PROG.coins-=c;if(S)S.helped=true;saveProg();const el=$('#coins');el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump');$('#coinN').textContent=PROG.coins;return true;
@@ -1043,7 +1089,7 @@ function win(){
   q.forEach(t=>extra.push(`📋 Задание выполнено: «${t}» — заберите награду в «Заданиях».`));
   PROG.top=Math.max(PROG.top||1,S.L+1);
   const next=S.L+1<PROG.top?PROG.top:S.L+1;
-  PROG.level=next;saveProg();try{localStorage.removeItem('kartoteka:game10')}catch(e){}
+  PROG.level=next;saveProg();try{localStorage.removeItem('kartoteka:game12')}catch(e){}
   $('#coinN').textContent=PROG.coins;$('#tokN').textContent=PROG.tokens;
   sfx('win');
   openOv(`<div class="band"><div class="eyebrow">Все карты разложены</div><h2>Уровень ${S.L} пройден!</h2>
@@ -2050,6 +2096,19 @@ function onCatDone(i){
 function nextChest(){return Math.ceil(Math.max(1,PROG.top||PROG.level||1)/10)*10}
 
 /* ---------- Что нового ---------- */
+function news12(after){
+  openOv(`<div class="band"><div class="eyebrow">Обновление</div><h2>Уровни стали проходимыми</h2></div>
+   <div class="sbody"><ul>
+     <li><b>Больше ходов.</b> Лимит теперь считается по обычной игре, а не по идеальной — уровни проходятся без джокера.</li>
+     <li><b>🪙 Монетки</b> прячутся в стопках и колоде: открыли — получили +10 монет.</li>
+     <li><b>⏳ Песочные часы</b> дают +3 хода, <b>💡 лампочка</b> — бесплатную подсказку.</li>
+     <li><b>✨ Золотые слова</b> светятся: положите такое в ячейку — +15 монет.</li>
+     <li><b>💰 Сокровищница</b> — каждый 7-й уровень: много монеток и золотых слов.</li>
+   </ul>
+   <div class="stats2"><div class="stat gold" style="grid-column:1/-1"><span class="k">Подарок за терпение</span><span class="v">🪙 +300 монет</span></div></div>
+   <div class="acts2"><button class="sbtn go" id="oClose" type="button">Забрать и играть</button></div></div>`);
+  $('#oClose').onclick=()=>{closeOv();sfx('coin');$('#coinN')&&($('#coinN').textContent=PROG.coins);after()};
+}
 function newsScreen(grant,after){
   openOv(`<div class="band"><div class="eyebrow">Обновление</div><h2>Что нового</h2></div>
    <div class="sbody"><ul>
@@ -2100,7 +2159,7 @@ $('#bLevels').onclick=homeMenu;
 let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{layout();render()},80)});
 NC=(Math.min(innerWidth,screen.width||innerWidth)>=700&&innerHeight>=560)?5:4;
 document.documentElement.classList.toggle('wide',NC===5);
-layout();loadLevel(PROG.level||1,true);homeMenu();{const go=()=>{if(bonusDue())openBonus();else homeMenu()};if(NEWS_GRANT>=0)newsScreen(NEWS_GRANT,go);else if(bonusDue())openBonus()}
+layout();loadLevel(PROG.level||1,true);homeMenu();{const go=()=>{if(bonusDue())openBonus();else homeMenu()};if(NEWS12)news12(go);else if(NEWS_GRANT>=0)newsScreen(NEWS_GRANT,go);else if(bonusDue())openBonus()}
 </script>
 
 <script>

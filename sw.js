@@ -1,5 +1,5 @@
 /* Пасьянс Картотека — service worker для офлайна */
-const VERSION = 'kartoteka-v11';
+const VERSION = 'kartoteka-v12';
 const CORE = [
   './',
   './index.html',
